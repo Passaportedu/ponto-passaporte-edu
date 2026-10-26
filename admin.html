@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel do Ponto</title>
+<link rel="icon" href="icon-192.png">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root { --azul:#0b5394; --azul2:#e8f0fe; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --linha:#dadce0; --fundo:#f3f6fa; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--fundo); color:#202124; font-size:14px; }
+  header { background:var(--azul); color:#fff; padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  header h1 { margin:0; font-size:17px; flex:1; min-width:160px; }
+  header select { font-size:14px; padding:6px 8px; border-radius:8px; border:0; width:auto; max-width:100%; }
+  header button { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.6); border-radius:8px; padding:6px 10px; cursor:pointer; }
+  nav { display:flex; gap:4px; padding:8px 12px 0; overflow-x:auto; background:#fff; border-bottom:1px solid var(--linha); }
+  nav button { border:0; background:none; padding:10px 12px; font-size:14px; color:var(--cinza); border-bottom:3px solid transparent; cursor:pointer; white-space:nowrap; }
+  nav button.ativo { color:var(--azul); border-bottom-color:var(--azul); font-weight:600; }
+  main { max-width:1100px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:14px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  label { display:block; font-size:12px; font-weight:600; color:var(--cinza); margin-bottom:4px; }
+  input, select, textarea { font:inherit; padding:8px 10px; border:1px solid #c7ccd3; border-radius:8px; background:#fff; color:#202124; width:100%; }
+  textarea { min-height:90px; }
+  .grade { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; align-items:end; }
+  .linha { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  button.b { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--azul); background:var(--azul); color:#fff; cursor:pointer; }
+  button.b2 { font:inherit; padding:6px 10px; border-radius:8px; border:1px solid #c7ccd3; background:#fff; color:#202124; cursor:pointer; }
+  button.perigo { border-color:var(--verm); color:var(--verm); }
+  button:disabled { opacity:.5; cursor:default; }
+  .tabela { width:100%; border-collapse:collapse; }
+  .tabela th, .tabela td { border-bottom:1px solid var(--linha); padding:7px 6px; text-align:left; vertical-align:middle; }
+  .tabela th { font-size:12px; color:var(--cinza); font-weight:600; background:#fafbfc; }
+  .rolagem { overflow-x:auto; }
+  .tag { display:inline-block; font-size:11px; padding:2px 7px; border-radius:10px; background:#eee; }
+  .tag.ok { background:#e6f4ea; color:#0d652d; } .tag.alerta { background:#fce8e6; color:var(--verm); } .tag.cinza { color:var(--cinza); }
+  .hora { font-variant-numeric:tabular-nums; }
+  .foto { cursor:pointer; color:var(--azul); text-decoration:underline; font-size:12px; margin-left:4px; }
+  .dica { font-size:12px; color:var(--cinza); }
+  .oculto { display:none !important; }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#202124; color:#fff; padding:10px 16px; border-radius:8px; display:none; z-index:20; max-width:90vw; }
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:10; padding:16px; }
+  #modal .caixa { background:#fff; border-radius:12px; padding:16px; max-width:420px; width:100%; max-height:90vh; overflow:auto; }
+  #modal img { width:100%; border-radius:8px; }
+  #login { max-width:380px; margin:60px auto; }
+  #login .card > * + * { margin-top:10px; }
+  .qr { display:inline-block; padding:8px; background:#fff; }
+  /* ---------- ESPELHO PARA IMPRESSÃO ---------- */
+  .folha { background:#fff; width:190mm; margin:0 auto 16px; padding:8mm; font-family:Arial, sans-serif; font-size:9.5pt; color:#000; box-shadow:0 1px 3px rgba(0,0,0,.15); }
+  .folha h3 { text-align:center; margin:0; font-size:13pt; color:var(--azul); }
+  .folha h4 { text-align:center; margin:2px 0 8px; font-size:11pt; }
+  .folha .ident { display:grid; grid-template-columns:1fr 1fr; gap:2px 12px; margin-bottom:6px; font-size:9pt; }
+  .folha table { width:100%; border-collapse:collapse; }
+  .folha th, .folha td { border:1px solid #808080; padding:2px 4px; text-align:center; font-size:8.5pt; height:5.2mm; }
+  .folha th { background:var(--azul); color:#fff; }
+  .folha td.obs { text-align:left; font-size:7.5pt; color:#c5221f; }
+  .folha tr.fds td { background:#eee; }
+  .folha tr.fora td { background:#bfbfbf; }
+  .folha tr.total td { background:#d9e2f3; font-weight:bold; }
+  .folha .decl { margin:8px 0 26px; font-size:8.5pt; }
+  .folha .ass { display:flex; justify-content:space-between; gap:20px; }
+  .folha .ass div { flex:1; border-top:1px solid #000; text-align:center; padding-top:3px; font-size:8.5pt; }
+  .folha .local { text-align:center; margin-top:14px; font-size:8.5pt; }
+  .folha .rodape { font-size:7pt; color:#5f6368; margin-top:4px; }
+  @media print {
+    @page { size:A4 portrait; margin:8mm; }
+    body { background:#fff; }
+    header, nav, .naoimprime, #toast { display:none !important; }
+    main { padding:0; max-width:none; }
+    .folha { box-shadow:none; margin:0; width:auto; padding:0; page-break-after:always; }
+    .folha:last-child { page-break-after:auto; }
+    .imprimir-qr { box-shadow:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="login" class="oculto">
+  <div class="card">
+    <h2 id="loginTitulo">Painel do Ponto</h2>
+    <div><label>E-mail</label><input id="lEmail" type="email" autocomplete="username"></div>
+    <div id="boxSenha"><label>Senha</label><input id="lSenha" type="password" autocomplete="current-password"></div>
+    <div id="boxNome" class="oculto"><label>Seu nome</label><input id="lNome"></div>
+    <button class="b" id="lEntrar" style="width:100%">Entrar</button>
+    <div class="linha" style="justify-content:space-between">
+      <a href="#" id="lAlterna" class="dica">Primeiro acesso? Criar conta</a>
+      <a href="#" id="lEsqueci" class="dica">Esqueci a senha</a>
+    </div>
+    <div id="lMsg" class="dica"></div>
+  </div>
+</div>
+
+<div id="semPerfil" class="oculto" style="max-width:480px;margin:60px auto">
+  <div class="card">
+    <h2>Conta ainda não liberada</h2>
+    <p>Sua conta (<b id="spEmail"></b>) foi criada, mas ainda não tem acesso a nenhuma escola.
+       Peça para a administração da rede liberar este e-mail no painel, na aba <b>Usuários</b>.</p>
+    <button class="b2" onclick="sair()">Sair</button>
+  </div>
+</div>
+
+<div id="painel" class="oculto">
+  <header>
+    <h1 id="hTitulo">Painel do Ponto</h1>
+    <select id="selEscola"></select>
+    <span id="hUsuario" style="font-size:12px;opacity:.85"></span>
+    <button onclick="sair()">Sair</button>
+  </header>
+  <nav id="abas">
+    <button data-aba="hoje" class="ativo">Batidas do dia</button>
+    <button data-aba="colab">Colaboradores</button>
+    <button data-aba="ocor">Ocorrências</button>
+    <button data-aba="espelho">Espelho do mês</button>
+    <button data-aba="escolas" class="soRede">Escolas e QR Code</button>
+    <button data-aba="usuarios" class="soRede">Usuários</button>
+  </nav>
+  <main>
+    <!-- BATIDAS DO DIA -->
+    <section id="aba-hoje">
+      <div class="card naoimprime">
+        <div class="linha">
+          <div><label>Data</label><input type="date" id="hData"></div>
+          <button class="b2" id="hAtualizar" style="align-self:flex-end">Atualizar</button>
+          <span class="dica" id="hResumo" style="align-self:flex-end"></span>
+        </div>
+      </div>
+      <div class="card rolagem"><table class="tabela" id="hTabela"></table></div>
+    </section>
+
+    <!-- COLABORADORES -->
+    <section id="aba-colab" class="oculto">
+      <div class="card">
+        <h2 id="cTitulo">Novo colaborador</h2>
+        <input type="hidden" id="cId">
+        <div class="grade">
+          <div><label>Nome completo *</label><input id="cNome"></div>
+          <div><label>Matrícula / CPF</label><input id="cMatricula"></div>
+          <div><label>Cargo</label><input id="cCargo"></div>
+          <div><label>Setor</label><input id="cSetor"></div>
+          <div><label>Jornada</label><input id="cJornada" placeholder="08:00-12:00 / 14:00-18:00"></div>
+          <div class="linha"><button class="b" id="cSalvar">Salvar</button><button class="b2 oculto" id="cCancelar">Cancelar</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <details>
+          <summary style="cursor:pointer;font-weight:600">Cadastrar vários de uma vez</summary>
+          <p class="dica">Um colaborador por linha, no formato: <b>Nome; Matrícula; Cargo; Setor; Jornada</b> (só o nome é obrigatório). Dá para colar direto de uma planilha.</p>
+          <textarea id="cLote" placeholder="Maria da Silva; 12345; Professora; Pedagógico; 08:00-12:00"></textarea>
+          <button class="b" id="cLoteSalvar" style="margin-top:8px">Cadastrar lista</button>
+        </details>
+      </div>
+      <div class="card rolagem">
+        <div class="linha" style="justify-content:space-between;margin-bottom:8px">
+          <h2 style="margin:0">Colaboradores da escola</h2>
+          <label class="linha" style="margin:0"><input type="checkbox" id="cInativos" style="width:auto"> mostrar inativos</label>
+        </div>
+        <table class="tabela" id="cTabela"></table>
+      </div>
+    </section>
+
+    <!-- OCORRÊNCIAS -->
+    <section id="aba-ocor" class="oculto">
+      <div class="card">
+        <h2>Lançar ocorrência</h2>
+        <p class="dica">Use para faltas, atestados, férias, feriados e batidas esquecidas. A batida original nunca é alterada; a ocorrência aparece na coluna Observação do espelho.</p>
+        <div class="grade">
+          <div><label>Colaborador</label><select id="oColab"></select></div>
+          <div><label>Data</label><input type="date" id="oData"></div>
+          <div><label>Código</label>
+            <select id="oCodigo">
+              <option value="F">F - Falta</option><option value="FJ">FJ - Falta justificada</option>
+              <option value="AT">AT - Atestado médico</option><option value="FE">FE - Férias</option>
+              <option value="FER">FER - Feriado</option><option value="PF">PF - Ponto facultativo</option>
+              <option value="SE">SE - Serviço externo</option><option value="AJ">AJ - Ajuste / batida esquecida</option>
+            </select></div>
+          <div><label>Observação</label><input id="oObs" placeholder="Ex.: esqueceu a saída, saiu às 18:00"></div>
+          <div><button class="b" id="oSalvar">Lançar</button></div>
+        </div>
+      </div>
+      <div class="card rolagem">
+        <div class="linha" style="margin-bottom:8px"><label style="margin:0">Mês</label><input type="month" id="oMes" style="width:auto"></div>
+        <table class="tabela" id="oTabela"></table>
+      </div>
+    </section>
+
+    <!-- ESPELHO -->
+    <section id="aba-espelho" class="oculto">
+      <div class="card naoimprime">
+        <div class="grade">
+          <div><label>Colaborador</label><select id="eColab"></select></div>
+          <div><label>Mês</label><input type="month" id="eMes"></div>
+          <div class="linha">
+            <button class="b" id="eGerar">Gerar espelho</button>
+            <button class="b2" id="eImprimir" disabled>Imprimir / salvar PDF</button>
+            <button class="b2" id="eCsv">Exportar batidas do mês (CSV)</button>
+          </div>
+        </div>
+        <p class="dica">Para salvar em PDF, clique em Imprimir e escolha "Salvar como PDF". Cada colaborador sai em uma página A4.</p>
+      </div>
+      <div id="eFolhas"></div>
+    </section>
+
+    <!-- ESCOLAS -->
+    <section id="aba-escolas" class="oculto">
+      <div class="card">
+        <h2 id="esTitulo">Nova escola</h2>
+        <input type="hidden" id="esId">
+        <div class="grade">
+          <div><label>Código (vai no QR) *</label><input id="esCodigo" placeholder="CAM-01" style="text-transform:uppercase"></div>
+          <div><label>Nome da escola *</label><input id="esNome" placeholder="Passaporte Edu Camaçari"></div>
+          <div><label>Cidade</label><input id="esCidade"></div>
+          <div><label>UF</label><input id="esUf" maxlength="2" style="text-transform:uppercase"></div>
+          <div><label>Fuso horário</label>
+            <select id="esFuso">
+              <option value="America/Bahia">Bahia</option><option value="America/Sao_Paulo">Brasília / SP / Sul</option>
+              <option value="America/Recife">Pernambuco / PB / RN / AL</option><option value="America/Fortaleza">Ceará / PI / MA</option>
+              <option value="America/Belem">Pará / AP</option><option value="America/Araguaina">Tocantins</option>
+              <option value="America/Manaus">Amazonas</option><option value="America/Cuiaba">Mato Grosso</option>
+              <option value="America/Campo_Grande">Mato Grosso do Sul</option><option value="America/Porto_Velho">Rondônia</option>
+              <option value="America/Rio_Branco">Acre</option><option value="America/Boa_Vista">Roraima</option>
+            </select></div>
+          <div><label>Coordenadas (cole do Google Maps)</label><input id="esCoord" placeholder="-12.6988776, -38.3254029"></div>
+          <div><label>Raio aceito (m)</label><input id="esRaio" type="number" value="200" min="30" max="5000"></div>
+          <div class="linha"><label class="linha" style="margin:0"><input type="checkbox" id="esGps" checked style="width:auto"> exigir GPS</label>
+            <label class="linha" style="margin:0"><input type="checkbox" id="esSelfie" checked style="width:auto"> exigir selfie</label>
+            <label class="linha" style="margin:0"><input type="checkbox" id="esAtiva" checked style="width:auto"> ativa</label></div>
+          <div class="linha"><button class="b" id="esSalvar">Salvar</button><button class="b2 oculto" id="esCancelar">Cancelar</button></div>
+        </div>
+      </div>
+      <div class="card rolagem"><table class="tabela" id="esTabela"></table></div>
+      <div id="esQr"></div>
+    </section>
+
+    <!-- USUÁRIOS -->
+    <section id="aba-usuarios" class="oculto">
+      <div class="card">
+        <h2>Liberar acesso ao painel</h2>
+        <p class="dica">A pessoa primeiro cria a conta em "Primeiro acesso" na tela de entrada do painel. Depois você libera o e-mail aqui.</p>
+        <div class="grade">
+          <div><label>E-mail</label><input id="uEmail" type="email"></div>
+          <div><label>Nome</label><input id="uNome"></div>
+          <div><label>Papel</label><select id="uPapel"><option value="gestor">Gestor de uma escola</option><option value="rede">Administração da rede (todas)</option></select></div>
+          <div><label>Escola</label><select id="uEscola"></select></div>
+          <div><button class="b" id="uSalvar">Liberar acesso</button></div>
+        </div>
+      </div>
+      <div class="card rolagem"><table class="tabela" id="uTabela"></table></div>
+    </section>
+  </main>
+</div>
+
+<div id="modal" onclick="if(event.target===this)fecharModal()"><div class="caixa" id="modalCaixa"></div></div>
+<div id="toast"></div>
+
+<script>
+var CFG = window.PONTO_CONFIG;
+var TIPOS = ['Entrada', 'Saída intervalo', 'Retorno intervalo', 'Saída'];
+var DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+var MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+var CODIGOS = { F:'Falta', FJ:'Falta justificada', AT:'Atestado', FE:'Férias', FER:'Feriado', PF:'Ponto facultativo', SE:'Serviço externo', AJ:'Ajuste' };
+var sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { storageKey: 'ponto-painel' } });
+
+var usuario = null, perfil = null, escolas = [], escola = null, colabs = [];
+
+/* ===================== UTILITÁRIOS ===================== */
+function el(id) { return document.getElementById(id); }
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function toast(t, ms) { var x = el('toast'); x.textContent = t; x.style.display = 'block'; clearTimeout(x._t); x._t = setTimeout(function () { x.style.display = 'none'; }, ms || 3500); }
+function falha(e) { toast('Erro: ' + (e && e.message ? e.message : e), 6000); console.error(e); }
+function ok(r) { if (r.error) throw r.error; return r.data; }
+function abrirModal(html) { el('modalCaixa').innerHTML = html; el('modal').style.display = 'flex'; }
+function fecharModal() { el('modal').style.display = 'none'; el('modalCaixa').innerHTML = ''; }
+function ehRede() { return perfil && perfil.papel === 'rede'; }
+function hojeNoFuso(fuso) { return new Intl.DateTimeFormat('en-CA', { timeZone: fuso || 'America/Bahia' }).format(new Date()); }
+function mesAtual() { return hojeNoFuso(escola && escola.fuso).slice(0, 7); }
+function dataBr(iso) { var p = iso.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+function min(h) { if (!h) return null; return parseInt(h.slice(0, 2), 10) * 60 + parseInt(h.slice(3, 5), 10); }
+function hhmm(m) { return Math.floor(m / 60) + ':' + ('0' + (m % 60)).slice(-2); }
+function fimMes(ym) { var p = ym.split('-').map(Number); return ym + '-' + ('0' + new Date(p[0], p[1], 0).getDate()).slice(-2); }
+
+// Busca todas as linhas (o Supabase devolve no máximo 1000 por vez)
+function buscarTudo(montar) {
+  var tudo = [], passo = 1000;
+  function pagina(de) {
+    return montar().range(de, de + passo - 1).then(ok).then(function (d) {
+      tudo = tudo.concat(d);
+      return d.length === passo ? pagina(de + passo) : tudo;
+    });
+  }
+  return pagina(0);
+}
+
+/* ===================== LOGIN ===================== */
+var modoCadastro = false;
+el('lAlterna').onclick = function (ev) {
+  ev.preventDefault(); modoCadastro = !modoCadastro;
+  el('boxNome').classList.toggle('oculto', !modoCadastro);
+  el('loginTitulo').textContent = modoCadastro ? 'Criar conta' : 'Painel do Ponto';
+  el('lEntrar').textContent = modoCadastro ? 'Criar conta' : 'Entrar';
+  this.textContent = modoCadastro ? 'Já tenho conta: entrar' : 'Primeiro acesso? Criar conta';
+  el('lMsg').textContent = '';
+};
+el('lEntrar').onclick = function () {
+  var email = el('lEmail').value.trim(), senha = el('lSenha').value;
+  if (!email || !senha) { el('lMsg').textContent = 'Preencha e-mail e senha.'; return; }
+  el('lMsg').textContent = 'Aguarde...';
+  if (modoCadastro) {
+    if (senha.length < 8) { el('lMsg').textContent = 'A senha precisa de pelo menos 8 caracteres.'; return; }
+    sb.auth.signUp({ email: email, password: senha, options: { data: { nome: el('lNome').value.trim() }, emailRedirectTo: location.href.split('#')[0] } })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        el('lMsg').textContent = r.data.session ? 'Conta criada.' : 'Conta criada. Confirme pelo link enviado ao seu e-mail e depois entre.';
+      }).catch(function (e) { el('lMsg').textContent = e.message; });
+  } else {
+    sb.auth.signInWithPassword({ email: email, password: senha })
+      .then(function (r) { if (r.error) throw r.error; })
+      .catch(function (e) { el('lMsg').textContent = /Invalid login/i.test(e.message) ? 'E-mail ou senha incorretos.' : e.message; });
+  }
+};
+el('lEsqueci').onclick = function (ev) {
+  ev.preventDefault();
+  var email = el('lEmail').value.trim();
+  if (!email) { el('lMsg').textContent = 'Digite seu e-mail acima e clique de novo em "Esqueci a senha".'; return; }
+  sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split('#')[0] })
+    .then(function (r) { if (r.error) throw r.error; el('lMsg').textContent = 'Enviamos um link para redefinir a senha.'; })
+    .catch(function (e) { el('lMsg').textContent = e.message; });
+};
+function sair() { sb.auth.signOut().then(function () { location.reload(); }); }
+
+sb.auth.onAuthStateChange(function (evento, sessao) {
+  if (evento === 'PASSWORD_RECOVERY') {
+    abrirModal('<h2>Nova senha</h2><input type="password" id="novaSenha" placeholder="Mínimo 8 caracteres">' +
+      '<div class="linha" style="margin-top:10px"><button class="b" id="btNovaSenha">Salvar</button></div>');
+    el('btNovaSenha').onclick = function () {
+      var s = el('novaSenha').value;
+      if (s.length < 8) { toast('A senha precisa de pelo menos 8 caracteres.'); return; }
+      sb.auth.updateUser({ password: s }).then(ok).then(function () { fecharModal(); toast('Senha alterada.'); }).catch(falha);
+    };
+  }
+  var novo = sessao ? sessao.user : null;
+  // setTimeout: o Supabase recomenda não chamar o banco dentro deste evento
+  if (!iniciado || (novo && novo.id) !== (usuario && usuario.id)) {
+    iniciado = true; usuario = novo; setTimeout(iniciar, 0);
+  }
+});
+var iniciado = false;
+
+function iniciar() {
+  ['login', 'semPerfil', 'painel'].forEach(function (i) { el(i).classList.add('oculto'); });
+  if (!usuario) { el('login').classList.remove('oculto'); return; }
+  sb.from('perfis').select('*').eq('user_id', usuario.id).maybeSingle().then(ok).then(function (p) {
+    perfil = p;
+    if (!p) { el('spEmail').textContent = usuario.email; el('semPerfil').classList.remove('oculto'); return; }
+    return carregarEscolas().then(function () {
+      el('painel').classList.remove('oculto');
+      el('hTitulo').textContent = CFG.NOME_SISTEMA || 'Painel do Ponto';
+      el('hUsuario').textContent = (p.nome || usuario.email) + (ehRede() ? ' · Rede' : ' · Gestor');
+      document.querySelectorAll('.soRede').forEach(function (b) { b.classList.toggle('oculto', !ehRede()); });
+      if (ehRede()) limparSelfiesAntigas();
+      abrir('hoje');
+    });
+  }).catch(falha);
+}
+
+/* ===================== ESCOLA SELECIONADA ===================== */
+function carregarEscolas() {
+  return sb.from('escolas').select('*').order('nome').then(ok).then(function (lista) {
+    escolas = lista;
+    var sel = el('selEscola'), atual = escola && escola.id;
+    sel.innerHTML = lista.map(function (e) { return '<option value="' + e.id + '">' + esc(e.nome) + (e.ativa ? '' : ' (inativa)') + '</option>'; }).join('');
+    if (!lista.length) { sel.innerHTML = '<option value="">Nenhuma escola cadastrada</option>'; escola = null; return; }
+    var salvo = null; try { salvo = localStorage.getItem('painel_escola'); } catch (e) {}
+    var alvo = lista.find(function (e) { return e.id === atual; }) || lista.find(function (e) { return e.id === salvo; }) || lista[0];
+    sel.value = alvo.id; escola = alvo;
+    sel.disabled = lista.length < 2;
+    return carregarColabs();
+  });
+}
+el('selEscola').onchange = function () {
+  escola = escolas.find(function (e) { return e.id === el('selEscola').value; });
+  try { localStorage.setItem('painel_escola', escola.id); } catch (e) {}
+  carregarColabs().then(function () { abrir(abaAtual); }).catch(falha);
+};
+function carregarColabs() {
+  if (!escola) { colabs = []; return Promise.resolve(); }
+  return sb.from('colaboradores').select('id,escola_id,nome,matricula,cargo,setor,jornada,pin_definido,ativo,criado_em')
+    .eq('escola_id', escola.id).order('nome').then(ok).then(function (l) { colabs = l; });
+}
+function opcoesColab(incluirTodos, soAtivos) {
+  var l = colabs.filter(function (c) { return !soAtivos || c.ativo; });
+  return (incluirTodos ? '<option value="*">Todos os colaboradores</option>' : '') +
+    l.map(function (c) { return '<option value="' + c.id + '">' + esc(c.nome) + (c.ativo ? '' : ' (inativo)') + '</option>'; }).join('');
+}
+
+/* ===================== ABAS ===================== */
+var abaAtual = 'hoje';
+document.querySelectorAll('#abas button').forEach(function (b) { b.onclick = function () { abrir(b.dataset.aba); }; });
+function abrir(aba) {
+  abaAtual = aba;
+  document.querySelectorAll('#abas button').forEach(function (b) { b.classList.toggle('ativo', b.dataset.aba === aba); });
+  document.querySelectorAll('main > section').forEach(function (s) { s.classList.toggle('oculto', s.id !== 'aba-' + aba); });
+  if (!escola && aba !== 'escolas' && aba !== 'usuarios') { toast(ehRede() ? 'Cadastre a primeira escola na aba "Escolas e QR Code".' : 'Nenhuma escola liberada.'); return; }
+  ({ hoje: telaHoje, colab: telaColab, ocor: telaOcor, espelho: telaEspelho, escolas: telaEscolas, usuarios: telaUsuarios })[aba]();
+}
+
+/* ===================== BATIDAS DO DIA ===================== */
+function telaHoje() {
+  if (!el('hData').value) el('hData').value = hojeNoFuso(escola.fuso);
+  carregarHoje();
+}
+el('hAtualizar').onclick = function () { carregarHoje(); };
+el('hData').onchange = function () { carregarHoje(); };
+function carregarHoje() {
+  var data = el('hData').value;
+  el('hTabela').innerHTML = '<tr><td class="dica">Carregando...</td></tr>';
+  buscarTudo(function () {
+    return sb.from('registros').select('id,colaborador_id,tipo,hora_local,no_local,distancia_m,precisao_m,foto_path,foto_removida_em')
+      .eq('escola_id', escola.id).eq('data_local', data).order('hora_local');
+  }).then(function (regs) {
+    var porColab = {};
+    regs.forEach(function (r) { (porColab[r.colaborador_id] = porColab[r.colaborador_id] || {})[r.tipo] = r; });
+    var lista = colabs.filter(function (c) { return c.ativo || porColab[c.id]; });
+    var presentes = lista.filter(function (c) { return porColab[c.id]; }).length;
+    el('hResumo').textContent = presentes + ' de ' + lista.length + ' colaboradores com registro neste dia';
+    var h = '<tr><th>Colaborador</th>' + TIPOS.map(function (t) { return '<th>' + t + '</th>'; }).join('') + '<th>Situação</th></tr>';
+    lista.forEach(function (c) {
+      var p = porColab[c.id] || {};
+      h += '<tr><td>' + esc(c.nome) + '</td>';
+      TIPOS.forEach(function (t) {
+        var r = p[t];
+        if (!r) { h += '<td class="dica">–</td>'; return; }
+        var alerta = r.no_local === 'Não' || r.no_local === 'Sem GPS';
+        h += '<td><span class="hora">' + r.hora_local.slice(0, 5) + '</span>' +
+          (r.foto_path ? '<span class="foto" data-foto="' + esc(r.foto_path) + '" data-legenda="' + esc(c.nome + ' · ' + t + ' ' + r.hora_local.slice(0, 5)) + '">selfie</span>' : '') +
+          (alerta ? ' <span class="tag alerta" title="Distância: ' + (r.distancia_m == null ? '?' : r.distancia_m + ' m') + '">' + esc(r.no_local === 'Não' ? 'fora do local' : 'sem GPS') + '</span>' : '') +
+          '</td>';
+      });
+      var sit = !porColab[c.id] ? '<span class="tag cinza">sem registro</span>'
+        : (p['Entrada'] && p['Saída'] ? '<span class="tag ok">completo</span>' : '<span class="tag">em andamento</span>');
+      h += '<td>' + sit + '</td></tr>';
+    });
+    if (!lista.length) h += '<tr><td colspan="6" class="dica">Nenhum colaborador cadastrado nesta escola.</td></tr>';
+    el('hTabela').innerHTML = h;
+  }).catch(falha);
+}
+document.addEventListener('click', function (ev) {
+  var f = ev.target.closest('[data-foto]');
+  if (!f) return;
+  sb.storage.from('selfies').createSignedUrl(f.dataset.foto, 120).then(ok).then(function (d) {
+    abrirModal('<img src="' + esc(d.signedUrl) + '" alt="Selfie"><p class="dica">' + esc(f.dataset.legenda) + '</p><button class="b2" onclick="fecharModal()">Fechar</button>');
+  }).catch(function () { toast('Selfie não encontrada (pode ter sido apagada após 90 dias).'); });
+});
+
+/* ===================== COLABORADORES ===================== */
+function telaColab() { limparFormColab(); desenharColabs(); }
+el('cInativos').onchange = desenharColabs;
+function desenharColabs() {
+  var mostrarInativos = el('cInativos').checked;
+  var lista = colabs.filter(function (c) { return mostrarInativos || c.ativo; });
+  var h = '<tr><th>Nome</th><th>Matrícula</th><th>Cargo</th><th>Setor</th><th>Jornada</th><th>PIN</th><th></th></tr>';
+  lista.forEach(function (c) {
+    h += '<tr' + (c.ativo ? '' : ' style="opacity:.55"') + '><td>' + esc(c.nome) + '</td><td>' + esc(c.matricula) + '</td><td>' + esc(c.cargo) + '</td><td>' + esc(c.setor) +
+      '</td><td>' + esc(c.jornada) + '</td><td>' + (c.pin_definido ? '<span class="tag ok">definido</span>' : '<span class="tag alerta">sem PIN</span>') +
+      '</td><td class="linha"><button class="b2" data-editar="' + c.id + '">Editar</button><button class="b2" data-pin="' + c.id + '">PIN</button>' +
+      '<button class="b2' + (c.ativo ? ' perigo' : '') + '" data-ativo="' + c.id + '">' + (c.ativo ? 'Desativar' : 'Reativar') + '</button></td></tr>';
+  });
+  if (!lista.length) h += '<tr><td colspan="7" class="dica">Nenhum colaborador.</td></tr>';
+  el('cTabela').innerHTML = h;
+}
+el('cTabela').onclick = function (ev) {
+  var b = ev.target.closest('button'); if (!b) return;
+  var id = b.dataset.editar || b.dataset.pin || b.dataset.ativo;
+  var c = colabs.find(function (x) { return x.id === id; });
+  if (b.dataset.editar) {
+    el('cId').value = c.id; el('cNome').value = c.nome; el('cMatricula').value = c.matricula || '';
+    el('cCargo').value = c.cargo || ''; el('cSetor').value = c.setor || ''; el('cJornada').value = c.jornada || '';
+    el('cTitulo').textContent = 'Editar colaborador'; el('cCancelar').classList.remove('oculto');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else if (b.dataset.pin) {
+    abrirModal('<h2>PIN de ' + esc(c.nome) + '</h2><p class="dica">De 4 a 6 números. Deixe em branco para remover o PIN.</p>' +
+      '<input id="novoPin" inputmode="numeric" maxlength="6"><div class="linha" style="margin-top:10px">' +
+      '<button class="b" id="btPin">Salvar</button><button class="b2" onclick="fecharModal()">Cancelar</button></div>');
+    el('btPin').onclick = function () {
+      sb.rpc('admin_definir_pin', { p_colaborador: c.id, p_pin: el('novoPin').value.trim() || null }).then(ok)
+        .then(function () { fecharModal(); toast('PIN atualizado.'); return carregarColabs(); }).then(desenharColabs).catch(falha);
+    };
+  } else if (b.dataset.ativo) {
+    if (c.ativo && !confirm('Desativar ' + c.nome + '? Ele(a) some da lista do app, mas o histórico de batidas fica guardado.')) return;
+    sb.from('colaboradores').update({ ativo: !c.ativo }).eq('id', c.id).then(ok).then(carregarColabs).then(desenharColabs).catch(falha);
+  }
+};
+function limparFormColab() {
+  ['cId', 'cNome', 'cMatricula', 'cCargo', 'cSetor', 'cJornada'].forEach(function (i) { el(i).value = ''; });
+  el('cTitulo').textContent = 'Novo colaborador'; el('cCancelar').classList.add('oculto');
+}
+el('cCancelar').onclick = limparFormColab;
+el('cSalvar').onclick = function () {
+  var dados = { nome: el('cNome').value.trim(), matricula: el('cMatricula').value.trim() || null, cargo: el('cCargo').value.trim() || null,
+    setor: el('cSetor').value.trim() || null, jornada: el('cJornada').value.trim() || null };
+  if (dados.nome.length < 2) { toast('Informe o nome.'); return; }
+  var id = el('cId').value;
+  var q = id ? sb.from('colaboradores').update(dados).eq('id', id)
+             : sb.from('colaboradores').insert(Object.assign({ escola_id: escola.id }, dados));
+  q.then(ok).then(function () { toast(id ? 'Colaborador atualizado.' : 'Colaborador cadastrado. Defina o PIN dele(a).'); limparFormColab(); return carregarColabs(); })
+    .then(desenharColabs).catch(function (e) { falha(/duplicate|unique/i.test(e.message) ? new Error('Já existe um colaborador com esse nome nesta escola.') : e); });
+};
+el('cLoteSalvar').onclick = function () {
+  var existentes = {}; colabs.forEach(function (c) { existentes[c.nome.toLowerCase()] = 1; });
+  var linhas = el('cLote').value.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+  var novos = [], repetidos = 0;
+  linhas.forEach(function (l) {
+    var p = l.split(/\t|;/).map(function (x) { return x.trim(); });
+    if (!p[0] || p[0].length < 2) return;
+    if (existentes[p[0].toLowerCase()]) { repetidos++; return; }
+    existentes[p[0].toLowerCase()] = 1;
+    novos.push({ escola_id: escola.id, nome: p[0], matricula: p[1] || null, cargo: p[2] || null, setor: p[3] || null, jornada: p[4] || null });
+  });
+  if (!novos.length) { toast(repetidos ? 'Todos os nomes já estavam cadastrados.' : 'Nada para cadastrar.'); return; }
+  sb.from('colaboradores').insert(novos).then(ok).then(function () {
+    toast(novos.length + ' cadastrado(s)' + (repetidos ? ', ' + repetidos + ' já existia(m)' : '') + '. Defina os PINs.');
+    el('cLote').value = ''; return carregarColabs();
+  }).then(desenharColabs).catch(falha);
+};
+
+/* ===================== OCORRÊNCIAS ===================== */
+function telaOcor() {
+  el('oColab').innerHTML = opcoesColab(false, false);
+  if (!el('oData').value) el('oData').value = hojeNoFuso(escola.fuso);
+  if (!el('oMes').value) el('oMes').value = mesAtual();
+  carregarOcor();
+}
+el('oMes').onchange = carregarOcor;
+function carregarOcor() {
+  var ym = el('oMes').value;
+  sb.from('ocorrencias').select('id,colaborador_id,data,codigo,observacao').eq('escola_id', escola.id)
+    .gte('data', ym + '-01').lte('data', fimMes(ym)).order('data').then(ok).then(function (l) {
+      var nomes = {}; colabs.forEach(function (c) { nomes[c.id] = c.nome; });
+      var h = '<tr><th>Data</th><th>Colaborador</th><th>Código</th><th>Observação</th><th></th></tr>';
+      l.forEach(function (o) {
+        h += '<tr><td>' + dataBr(o.data) + '</td><td>' + esc(nomes[o.colaborador_id]) + '</td><td>' + o.codigo + ' - ' + CODIGOS[o.codigo] +
+          '</td><td>' + esc(o.observacao) + '</td><td><button class="b2 perigo" data-apagar="' + o.id + '">Excluir</button></td></tr>';
+      });
+      if (!l.length) h += '<tr><td colspan="5" class="dica">Nenhuma ocorrência neste mês.</td></tr>';
+      el('oTabela').innerHTML = h;
+    }).catch(falha);
+}
+el('oTabela').onclick = function (ev) {
+  var b = ev.target.closest('[data-apagar]'); if (!b || !confirm('Excluir esta ocorrência?')) return;
+  sb.from('ocorrencias').delete().eq('id', b.dataset.apagar).then(ok).then(carregarOcor).catch(falha);
+};
+el('oSalvar').onclick = function () {
+  if (!el('oColab').value || !el('oData').value) { toast('Escolha o colaborador e a data.'); return; }
+  sb.from('ocorrencias').insert({ escola_id: escola.id, colaborador_id: el('oColab').value, data: el('oData').value,
+    codigo: el('oCodigo').value, observacao: el('oObs').value.trim() || null }).then(ok)
+    .then(function () { toast('Ocorrência lançada.'); el('oObs').value = ''; carregarOcor(); })
+    .catch(function (e) { falha(/duplicate|unique/i.test(e.message) ? new Error('Já existe ocorrência para esse colaborador nesse dia. Exclua a anterior primeiro.') : e); });
+};
+
+/* ===================== ESPELHO ===================== */
+function telaEspelho() {
+  var atual = el('eColab').value;
+  el('eColab').innerHTML = opcoesColab(true, false);
+  if (atual && el('eColab').querySelector('option[value="' + atual + '"]')) el('eColab').value = atual;
+  if (!el('eMes').value) el('eMes').value = mesAtual();
+}
+el('eGerar').onclick = gerarEspelho;
+el('eImprimir').onclick = function () { window.print(); };
+function dadosMes(ym) {
+  return Promise.all([
+    buscarTudo(function () {
+      return sb.from('registros').select('colaborador_id,tipo,data_local,hora_local,no_local')
+        .eq('escola_id', escola.id).gte('data_local', ym + '-01').lte('data_local', fimMes(ym)).order('data_local').order('hora_local');
+    }),
+    buscarTudo(function () {
+      return sb.from('ocorrencias').select('colaborador_id,data,codigo,observacao')
+        .eq('escola_id', escola.id).gte('data', ym + '-01').lte('data', fimMes(ym));
+    })
+  ]);
+}
+function gerarEspelho() {
+  var ym = el('eMes').value, alvo = el('eColab').value;
+  if (!ym) { toast('Escolha o mês.'); return; }
+  el('eFolhas').innerHTML = '<div class="card dica">Gerando...</div>';
+  dadosMes(ym).then(function (r) {
+    var regs = r[0], ocs = r[1];
+    var lista = alvo === '*' ? colabs.filter(function (c) { return c.ativo || regs.some(function (x) { return x.colaborador_id === c.id; }); })
+                             : colabs.filter(function (c) { return c.id === alvo; });
+    el('eFolhas').innerHTML = lista.map(function (c) { return folha(c, ym, regs, ocs); }).join('') ||
+      '<div class="card dica">Nenhum colaborador para gerar.</div>';
+    el('eImprimir').disabled = !lista.length;
+  }).catch(falha);
+}
+function folha(c, ym, regs, ocs) {
+  var p = ym.split('-').map(Number), ano = p[0], mes = p[1], nDias = new Date(ano, mes, 0).getDate();
+  var hoje = hojeNoFuso(escola.fuso);
+  var porDia = {}, ocDia = {};
+  regs.forEach(function (r) {
+    if (r.colaborador_id !== c.id) return;
+    var d = porDia[r.data_local] = porDia[r.data_local] || {};
+    if (!d[r.tipo]) d[r.tipo] = r.hora_local.slice(0, 5);
+    if (r.no_local === 'Não') d.fora = true;
+  });
+  ocs.forEach(function (o) { if (o.colaborador_id === c.id) ocDia[o.data] = o; });
+  var total = 0, trab = 0, pend = 0, linhas = '';
+  for (var d = 1; d <= 31; d++) {
+    if (d > nDias) { linhas += '<tr class="fora"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="obs"></td></tr>'; continue; }
+    var iso = ym + '-' + ('0' + d).slice(-2), dow = new Date(ano, mes - 1, d).getDay(), fds = dow === 0 || dow === 6;
+    var b = porDia[iso] || {}, oc = ocDia[iso];
+    var e = b['Entrada'] || '', si = b['Saída intervalo'] || '', ri = b['Retorno intervalo'] || '', s = b['Saída'] || '';
+    var obs = [], horas = '', algo = e || si || ri || s;
+    if (algo) {
+      trab++;
+      if (!e) obs.push('Sem entrada');
+      if (!s) obs.push('Sem saída');
+      if (!!si !== !!ri) obs.push('Intervalo incompleto');
+      if (e && s) {
+        var m = min(s) - min(e); if (m < 0) m += 1440;
+        if (si && ri) m -= Math.max(0, min(ri) - min(si));
+        if (m > 0) { total += m; horas = hhmm(m); }
+      }
+      if (b.fora) obs.push('Fora do local');
+    } else if (!fds && iso <= hoje && !oc && (!c.criado_em || iso >= c.criado_em.slice(0, 10))) obs.push('Sem registro');
+    if (obs.length) pend++;
+    var txtOc = oc ? oc.codigo + (oc.observacao ? ': ' + oc.observacao : '') : '';
+    var obsTxt = [txtOc].concat(obs).filter(Boolean).join('; ');
+    linhas += '<tr' + (fds ? ' class="fds"' : '') + '><td>' + ('0' + d).slice(-2) + '/' + ('0' + mes).slice(-2) + '</td><td>' + DIAS[dow] +
+      '</td><td>' + e + '</td><td>' + si + '</td><td>' + ri + '</td><td>' + s + '</td><td>' + horas + '</td><td class="obs"' +
+      (oc && !obs.length ? ' style="color:#000"' : '') + '>' + esc(obsTxt) + '</td></tr>';
+  }
+  var geradoEm = new Date().toLocaleString('pt-BR');
+  return '<div class="folha">' +
+    '<h3>' + esc((CFG.NOME_REDE && escola.nome.toLowerCase().indexOf(CFG.NOME_REDE.toLowerCase()) !== 0 ? CFG.NOME_REDE + ' · ' : '') + escola.nome).toUpperCase() + '</h3>' +
+    '<h4>ESPELHO DE PONTO · ' + MESES[mes - 1].toUpperCase() + '/' + ano + '</h4>' +
+    '<div class="ident"><div><b>Colaborador:</b> ' + esc(c.nome) + '</div><div><b>Matrícula:</b> ' + esc(c.matricula) + '</div>' +
+    '<div><b>Cargo:</b> ' + esc(c.cargo) + '</div><div><b>Setor:</b> ' + esc(c.setor) + '</div>' +
+    '<div><b>Jornada:</b> ' + esc(c.jornada) + '</div><div><b>Escola:</b> ' + esc(escola.nome) + '</div></div>' +
+    '<table><tr><th>Data</th><th>Dia</th><th>Entrada</th><th>Saída intervalo</th><th>Retorno intervalo</th><th>Saída</th><th>Horas</th><th style="width:34%">Observação</th></tr>' +
+    linhas +
+    '<tr class="total"><td colspan="6" style="text-align:right">TOTAL DE HORAS NO MÊS</td><td>' + hhmm(total) + '</td><td style="text-align:left">Dias trabalhados: ' + trab + ' · Dias com pendência: ' + pend + '</td></tr></table>' +
+    '<div class="rodape">Códigos: F falta · FJ falta justificada · AT atestado · FE férias · FER feriado · PF ponto facultativo · SE serviço externo · AJ ajuste. Gerado em ' + esc(geradoEm) + '.</div>' +
+    '<div class="decl">Declaro que os registros acima correspondem à jornada de trabalho que cumpri no período. Ausências, ajustes e pendências estão indicados na coluna Observação.</div>' +
+    '<div class="ass"><div>Assinatura do colaborador</div><div>Gestor(a) da escola</div></div>' +
+    '<div class="local">' + esc((escola.cidade || '______________') + (escola.uf ? ' - ' + escola.uf : '')) + ', ______ de ____________________ de ________.</div>' +
+    '</div>';
+}
+el('eCsv').onclick = function () {
+  var ym = el('eMes').value; if (!ym) { toast('Escolha o mês.'); return; }
+  buscarTudo(function () {
+    return sb.from('registros').select('data_local,hora_local,colaborador_id,tipo,no_local,distancia_m,precisao_m,latitude,longitude')
+      .eq('escola_id', escola.id).gte('data_local', ym + '-01').lte('data_local', fimMes(ym)).order('data_local').order('hora_local');
+  }).then(function (l) {
+    var nomes = {}, mats = {}; colabs.forEach(function (c) { nomes[c.id] = c.nome; mats[c.id] = c.matricula || ''; });
+    var q = function (v) { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var csv = ['Data;Hora;Colaborador;Matrícula;Tipo;No local;Distância (m);Precisão GPS (m);Latitude;Longitude']
+      .concat(l.map(function (r) {
+        return [dataBr(r.data_local), r.hora_local, nomes[r.colaborador_id], mats[r.colaborador_id], r.tipo, r.no_local,
+          r.distancia_m, r.precisao_m, r.latitude, r.longitude].map(q).join(';');
+      })).join('\r\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'batidas_' + escola.codigo + '_' + ym + '.csv'; a.click();
+  }).catch(falha);
+};
+
+/* ===================== ESCOLAS E QR (rede) ===================== */
+function urlApp(codigo) {
+  return location.href.split('#')[0].split('?')[0].replace(/admin\.html$/, '').replace(/\/?$/, '/') + '?e=' + encodeURIComponent(codigo);
+}
+function telaEscolas() { limparFormEscola(); desenharEscolas(); }
+function desenharEscolas() {
+  var h = '<tr><th>Código</th><th>Escola</th><th>Cidade</th><th>Local</th><th>Raio</th><th>Regras</th><th></th></tr>';
+  escolas.forEach(function (e) {
+    h += '<tr' + (e.ativa ? '' : ' style="opacity:.55"') + '><td><b>' + esc(e.codigo) + '</b></td><td>' + esc(e.nome) + '</td><td>' + esc((e.cidade || '') + (e.uf ? '/' + e.uf : '')) +
+      '</td><td>' + (e.latitude != null ? '<span class="tag ok">definido</span>' : '<span class="tag alerta">sem coordenadas</span>') +
+      '</td><td>' + e.raio_m + ' m</td><td class="dica">' + (e.exigir_gps ? 'GPS' : 'sem GPS') + ' · ' + (e.exigir_selfie ? 'selfie' : 'sem selfie') +
+      '</td><td class="linha"><button class="b2" data-ed="' + e.id + '">Editar</button><button class="b2" data-qr="' + e.id + '">QR Code</button></td></tr>';
+  });
+  if (!escolas.length) h += '<tr><td colspan="7" class="dica">Nenhuma escola cadastrada.</td></tr>';
+  el('esTabela').innerHTML = h;
+}
+el('esTabela').onclick = function (ev) {
+  var b = ev.target.closest('button'); if (!b) return;
+  var e = escolas.find(function (x) { return x.id === (b.dataset.ed || b.dataset.qr); });
+  if (b.dataset.ed) {
+    el('esId').value = e.id; el('esCodigo').value = e.codigo; el('esNome').value = e.nome; el('esCidade').value = e.cidade || '';
+    el('esUf').value = e.uf || ''; el('esFuso').value = e.fuso; el('esRaio').value = e.raio_m;
+    el('esCoord').value = e.latitude != null ? e.latitude + ', ' + e.longitude : '';
+    el('esGps').checked = e.exigir_gps; el('esSelfie').checked = e.exigir_selfie; el('esAtiva').checked = e.ativa;
+    el('esTitulo').textContent = 'Editar escola'; el('esCancelar').classList.remove('oculto');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else mostrarQr(e);
+};
+function mostrarQr(e) {
+  var url = urlApp(e.codigo);
+  el('esQr').innerHTML = '<div class="card imprimir-qr" style="text-align:center">' +
+    '<h2 style="font-size:22px">' + esc(e.nome) + '</h2><p style="font-size:16px">Aponte a câmera do celular para registrar o ponto</p>' +
+    '<div class="qr" id="qrDesenho"></div><p class="dica" style="word-break:break-all">' + esc(url) + '</p>' +
+    '<div class="linha naoimprime" style="justify-content:center"><button class="b" onclick="imprimirQr()">Imprimir cartaz</button>' +
+    '<button class="b2" onclick="navigator.clipboard.writeText(\'' + url.replace(/'/g, "\\'") + '\').then(function(){toast(\'Link copiado.\')})">Copiar link</button></div></div>';
+  new QRCode(el('qrDesenho'), { text: url, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M });
+  el('esQr').scrollIntoView({ behavior: 'smooth' });
+}
+function imprimirQr() {
+  var antes = document.querySelectorAll('main > section > .card:not(.imprimir-qr)');
+  antes.forEach(function (c) { c.classList.add('naoimprime'); });
+  window.print();
+  setTimeout(function () { antes.forEach(function (c) { c.classList.remove('naoimprime'); }); }, 500);
+}
+function limparFormEscola() {
+  ['esId', 'esCodigo', 'esNome', 'esCidade', 'esUf', 'esCoord'].forEach(function (i) { el(i).value = ''; });
+  el('esFuso').value = 'America/Bahia'; el('esRaio').value = 200;
+  el('esGps').checked = true; el('esSelfie').checked = true; el('esAtiva').checked = true;
+  el('esTitulo').textContent = 'Nova escola'; el('esCancelar').classList.add('oculto');
+}
+el('esCancelar').onclick = limparFormEscola;
+el('esSalvar').onclick = function () {
+  var codigo = el('esCodigo').value.trim().toUpperCase();
+  if (!/^[A-Z0-9-]{3,20}$/.test(codigo)) { toast('Código: de 3 a 20 letras, números ou hífen (ex.: CAM-01).'); return; }
+  if (el('esNome').value.trim().length < 2) { toast('Informe o nome da escola.'); return; }
+  var lat = null, lng = null, coord = el('esCoord').value.trim();
+  if (coord) {
+    var m = coord.match(/(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)/);
+    if (!m) { toast('Coordenadas inválidas. Use o formato -12.6988, -38.3254'); return; }
+    lat = parseFloat(m[1].replace(',', '.')); lng = parseFloat(m[2].replace(',', '.'));
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) { toast('Coordenadas fora do intervalo válido.'); return; }
+  }
+  var dados = { codigo: codigo, nome: el('esNome').value.trim(), cidade: el('esCidade').value.trim() || null,
+    uf: el('esUf').value.trim().toUpperCase() || null, fuso: el('esFuso').value, latitude: lat, longitude: lng,
+    raio_m: Math.min(5000, Math.max(30, parseInt(el('esRaio').value, 10) || 200)),
+    exigir_gps: el('esGps').checked, exigir_selfie: el('esSelfie').checked, ativa: el('esAtiva').checked };
+  if (dados.exigir_gps && lat == null) { toast('Para exigir GPS, informe as coordenadas da escola.'); return; }
+  var id = el('esId').value;
+  var q = id ? sb.from('escolas').update(dados).eq('id', id) : sb.from('escolas').insert(dados);
+  q.then(ok).then(function () { toast('Escola salva.'); limparFormEscola(); return carregarEscolas(); })
+    .then(desenharEscolas).catch(function (e) { falha(/duplicate|unique/i.test(e.message) ? new Error('Já existe uma escola com esse código.') : e); });
+};
+
+/* ===================== USUÁRIOS (rede) ===================== */
+function telaUsuarios() {
+  el('uEscola').innerHTML = escolas.map(function (e) { return '<option value="' + e.id + '">' + esc(e.nome) + '</option>'; }).join('');
+  carregarUsuarios();
+}
+el('uPapel').onchange = function () { el('uEscola').disabled = this.value === 'rede'; };
+function carregarUsuarios() {
+  sb.from('perfis').select('*').order('papel').order('email').then(ok).then(function (l) {
+    var nomesEsc = {}; escolas.forEach(function (e) { nomesEsc[e.id] = e.nome; });
+    var h = '<tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Escola</th><th></th></tr>';
+    l.forEach(function (p) {
+      h += '<tr><td>' + esc(p.nome) + '</td><td>' + esc(p.email) + '</td><td>' + (p.papel === 'rede' ? 'Rede' : 'Gestor') + '</td><td>' +
+        esc(p.escola_id ? nomesEsc[p.escola_id] : 'Todas') + '</td><td>' +
+        (p.user_id === usuario.id ? '<span class="dica">você</span>' : '<button class="b2 perigo" data-rem="' + p.user_id + '">Remover acesso</button>') + '</td></tr>';
+    });
+    el('uTabela').innerHTML = h;
+  }).catch(falha);
+}
+el('uTabela').onclick = function (ev) {
+  var b = ev.target.closest('[data-rem]'); if (!b || !confirm('Remover o acesso desta pessoa ao painel?')) return;
+  sb.rpc('admin_remover_usuario', { p_user: b.dataset.rem }).then(ok).then(carregarUsuarios).catch(falha);
+};
+el('uSalvar').onclick = function () {
+  var email = el('uEmail').value.trim(); if (!email) { toast('Informe o e-mail.'); return; }
+  sb.rpc('admin_vincular_usuario', { p_email: email, p_papel: el('uPapel').value,
+    p_escola: el('uPapel').value === 'rede' ? null : el('uEscola').value, p_nome: el('uNome').value.trim() || null })
+    .then(ok).then(function () { toast('Acesso liberado.'); el('uEmail').value = ''; el('uNome').value = ''; carregarUsuarios(); }).catch(falha);
+};
+
+/* ===================== LIMPEZA DAS SELFIES (90 dias) ===================== */
+// Roda sozinha uma vez por dia quando alguém da rede abre o painel
+function limparSelfiesAntigas() {
+  var hoje = new Date().toISOString().slice(0, 10), ult = null;
+  try { ult = localStorage.getItem('ponto_limpeza'); } catch (e) {}
+  if (ult === hoje) return;
+  var apagadas = 0;
+  function lote() {
+    return sb.rpc('admin_selfies_vencidas', { p_limite: 500 }).then(ok).then(function (l) {
+      if (!l.length) return;
+      return sb.storage.from('selfies').remove(l.map(function (x) { return x.foto_path; })).then(ok).then(function () {
+        return sb.rpc('admin_marcar_selfies_removidas', { p_ids: l.map(function (x) { return x.id; }) }).then(ok);
+      }).then(function (n) { apagadas += n; if (l.length === 500) return lote(); });
+    });
+  }
+  lote().then(function () {
+    return sb.rpc('admin_selfies_orfas', { p_limite: 500 }).then(ok).then(function (l) {
+      if (l.length) return sb.storage.from('selfies').remove(l.map(function (x) { return x.nome; })).then(ok);
+    });
+  }).then(function () {
+    try { localStorage.setItem('ponto_limpeza', hoje); } catch (e) {}
+    if (apagadas) toast(apagadas + ' selfie(s) com mais de 90 dias apagada(s).');
+  }).catch(function (e) { console.warn('Limpeza de selfies:', e); });
+}
+</script>
+</body>
+</html>

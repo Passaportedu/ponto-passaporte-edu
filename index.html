@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b5394">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ponto">
+<title>Registro de Ponto</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+  :root { --azul:#0b5394; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --fundo:#f3f6fa; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--fundo); color:#202124; }
+  header { background:var(--azul); color:#fff; padding:18px 16px; text-align:center; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  #unidade { font-size:13px; opacity:.85; margin-top:2px; }
+  #relogio { font-size:42px; font-weight:700; margin-top:6px; font-variant-numeric:tabular-nums; }
+  #dataHoje { font-size:14px; opacity:.85; text-transform:capitalize; }
+  main { max-width:460px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border-radius:14px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.12); margin-bottom:14px; }
+  label, .titulo { display:block; font-size:14px; font-weight:600; margin-bottom:6px; }
+  input, select { width:100%; font-size:18px; padding:12px; border:1px solid #c7ccd3; border-radius:10px; background:#fff; color:#202124; }
+  .tipos { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .tipo { padding:14px 8px; font-size:15px; border:2px solid #c7ccd3; border-radius:10px; background:#fff; color:#202124; }
+  .tipo.sel { border-color:var(--azul); background:#e8f0fe; font-weight:700; }
+  .tipo.feito { opacity:.45; text-decoration:line-through; }
+  .btn2 { width:100%; padding:14px; font-size:17px; font-weight:600; border:2px solid var(--azul); color:var(--azul); background:#fff; border-radius:10px; }
+  .btn2.cheio { background:var(--azul); color:#fff; }
+  .moldura { position:relative; width:100%; max-width:300px; margin:0 auto 10px; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden; display:none; }
+  .moldura video, .moldura img { width:100%; height:100%; object-fit:cover; display:block; }
+  #video { transform:scaleX(-1); }
+  .oval { position:absolute; inset:12% 18%; border:3px dashed rgba(255,255,255,.75); border-radius:50%; pointer-events:none; }
+  #btnRegistrar { width:100%; padding:18px; font-size:20px; font-weight:700; color:#fff; background:var(--verde); border:0; border-radius:12px; }
+  #btnRegistrar:disabled { background:#9aa0a6; }
+  .msg { padding:14px; border-radius:10px; font-size:16px; display:none; margin-top:12px; line-height:1.4; }
+  .msg.ok { background:#e6f4ea; color:#0d652d; display:block; }
+  .msg.erro { background:#fce8e6; color:var(--verm); display:block; }
+  .dica { font-size:13px; color:var(--cinza); margin-top:8px; }
+  .oculto { display:none !important; }
+  #carregando { text-align:center; padding:30px 16px; color:var(--cinza); }
+  .aviso { font-size:12px; color:var(--cinza); text-align:center; line-height:1.4; margin-top:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="titulo">Registro de Ponto</h1>
+  <div id="unidade"></div>
+  <div id="relogio">--:--:--</div>
+  <div id="dataHoje"></div>
+</header>
+
+<main>
+  <div id="carregando">Carregando...</div>
+  <div id="app" class="oculto">
+    <div class="card">
+      <label for="busca">Seu nome</label>
+      <input id="busca" placeholder="Digite para procurar" autocomplete="off">
+      <select id="nome" style="margin-top:8px"></select>
+      <div id="boxPin" style="display:none; margin-top:12px">
+        <label for="pin">PIN</label>
+        <input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="titulo">Tipo de registro</span>
+      <div class="tipos" id="tipos"></div>
+      <div class="dica" id="dicaTipo"></div>
+    </div>
+
+    <div class="card" id="cardSelfie">
+      <span class="titulo">Selfie</span>
+      <div class="moldura" id="boxVideo">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="oval"></div>
+      </div>
+      <div class="moldura" id="boxFoto"><img id="foto" alt="Sua selfie"></div>
+      <button class="btn2" id="btnCamera">Abrir câmera</button>
+      <button class="btn2 cheio oculto" id="btnCapturar">Capturar foto</button>
+      <div class="dica" id="dicaSelfie">Posicione o rosto dentro do contorno, em local iluminado.</div>
+    </div>
+
+    <button id="btnRegistrar" disabled>Registrar ponto</button>
+  </div>
+  <div id="msg" class="msg"></div>
+  <p class="aviso">O horário gravado é o do servidor, não o do aparelho. Para controle de jornada, a escola registra sua selfie
+    (guardada por 90 dias) e sua localização no momento da batida.</p>
+</main>
+
+<script>
+  var CFG = window.PONTO_CONFIG;
+  var TIPOS = ['Entrada', 'Saída intervalo', 'Retorno intervalo', 'Saída'];
+  var VALIDADE_FOTO_MS = 3 * 60 * 1000;   // selfie vale por 3 minutos
+  var LADO_MAX = 400;                      // tamanho máximo da foto em pixels
+  var sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } });
+
+  var escola = null, codigo = null, tipoSel = null;
+  var fotoBlob = null, fotoHora = 0, stream = null;
+
+  function el(id) { return document.getElementById(id); }
+  el('titulo').textContent = CFG.NOME_SISTEMA || 'Registro de Ponto';
+
+  function tick() {
+    var d = new Date();
+    el('relogio').textContent = d.toLocaleTimeString('pt-BR');
+    el('dataHoje').textContent = d.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
+  }
+  setInterval(tick, 1000); tick();
+
+  function lerLocal(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function gravarLocal(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  // Chama uma função do banco que responde {ok, erro, ...}
+  function rpc(nome, args) {
+    return sb.rpc(nome, args).then(function (r) {
+      if (r.error) throw new Error(r.error.message && r.error.message.indexOf('Failed to fetch') > -1
+        ? 'Sem conexão com a internet. Tente de novo.' : 'Erro no servidor: ' + r.error.message);
+      if (!r.data || !r.data.ok) throw new Error((r.data && r.data.erro) || 'Erro no servidor.');
+      return r.data;
+    });
+  }
+
+  /* ---------- ESCOLA (vem do QR Code: ?e=CODIGO) ---------- */
+  (function iniciar() {
+    var q = new URLSearchParams(location.search).get('e');
+    if (q) { codigo = q.trim().toUpperCase(); gravarLocal('ponto_escola', codigo); }
+    else codigo = lerLocal('ponto_escola');
+    if (!codigo) {
+      el('carregando').textContent = 'Escaneie o QR Code da sua escola para abrir o ponto.';
+      return;
+    }
+    rpc('app_escola', { p_codigo: codigo }).then(montar).catch(function (e) {
+      el('carregando').textContent = '';
+      erro(e);
+    });
+  })();
+
+  function montar(d) {
+    escola = d;
+    el('unidade').textContent = d.nome;
+    document.title = 'Ponto - ' + d.nome;
+    if (!d.exigirSelfie) el('cardSelfie').classList.add('oculto');
+    el('carregando').classList.add('oculto');
+    el('app').classList.remove('oculto');
+    montarLista('');
+    var box = el('tipos');
+    TIPOS.forEach(function (t) {
+      var b = document.createElement('button');
+      b.className = 'tipo'; b.textContent = t; b.dataset.tipo = t;
+      b.onclick = function () { selTipo(t); };
+      box.appendChild(b);
+    });
+    var ultimo = lerLocal('ponto_colab_' + d.codigo);
+    if (ultimo && d.colaboradores.some(function (c) { return c.id === ultimo; })) {
+      el('nome').value = ultimo;
+      mudouNome();
+    }
+  }
+
+  function normal(t) { return String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+
+  function montarLista(filtro) {
+    var sel = el('nome'), atual = sel.value, f = normal(filtro);
+    sel.innerHTML = '<option value="">Selecione seu nome</option>';
+    escola.colaboradores.filter(function (c) { return normal(c.nome).indexOf(f) > -1; })
+      .forEach(function (c) {
+        var o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.nome + (c.setor ? ' (' + c.setor + ')' : '');
+        sel.appendChild(o);
+      });
+    if (atual) sel.value = atual;
+  }
+
+  el('busca').oninput = function () {
+    montarLista(this.value);
+    if (el('nome').options.length === 2) { el('nome').selectedIndex = 1; mudouNome(); }
+  };
+  el('nome').onchange = mudouNome;
+
+  function colabSel() {
+    var id = el('nome').value;
+    return escola.colaboradores.find(function (c) { return c.id === id; }) || null;
+  }
+
+  function mudouNome() {
+    limparMsg();
+    var c = colabSel();
+    el('boxPin').style.display = (c && c.temPin) ? 'block' : 'none';
+    el('pin').value = '';
+    selTipo(null);
+    atualizarTipos();
+  }
+
+  function atualizarTipos() {
+    marcarFeitos([]);
+    var id = el('nome').value;
+    if (!id) { el('dicaTipo').textContent = ''; return; }
+    el('dicaTipo').textContent = 'Consultando seus registros de hoje...';
+    rpc('app_proximo', { p_codigo: codigo, p_colaborador: id }).then(function (r) {
+      if (el('nome').value !== id) return;
+      marcarFeitos(r.feitos || []);
+      if (r.proximo) { selTipo(r.proximo); el('dicaTipo').textContent = 'Próximo registro sugerido: ' + r.proximo; }
+      else { selTipo(null); el('dicaTipo').textContent = 'Todos os registros de hoje já foram feitos.'; }
+    }).catch(erro);
+  }
+
+  function marcarFeitos(lista) {
+    document.querySelectorAll('.tipo').forEach(function (b) {
+      b.classList.toggle('feito', lista.indexOf(b.dataset.tipo) > -1);
+    });
+  }
+
+  function selTipo(t) {
+    tipoSel = t;
+    document.querySelectorAll('.tipo').forEach(function (b) { b.classList.toggle('sel', b.dataset.tipo === t); });
+    atualizarBotao();
+  }
+
+  function atualizarBotao() {
+    var pronto = el('nome').value && tipoSel && (!escola.exigirSelfie || fotoBlob);
+    el('btnRegistrar').disabled = !pronto;
+  }
+
+  /* ---------- SELFIE (só câmera ao vivo) ---------- */
+  el('btnCamera').onclick = function () {
+    limparMsg();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      erro({ message: 'Este navegador não permite usar a câmera. Abra o link no Chrome ou no Safari.' });
+      return;
+    }
+    el('btnCamera').disabled = true;
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 } }, audio: false })
+      .then(function (s) {
+        stream = s;
+        el('video').srcObject = s;
+        el('boxFoto').style.display = 'none';
+        el('boxVideo').style.display = 'block';
+        el('btnCamera').classList.add('oculto');
+        el('btnCapturar').classList.remove('oculto');
+      })
+      .catch(function (e) {
+        var n = e && e.name, txt;
+        if (n === 'NotAllowedError' || n === 'PermissionDeniedError')
+          txt = 'A câmera foi bloqueada. Toque no cadeado ao lado do endereço do site, permita a Câmera e tente de novo.';
+        else if (n === 'NotFoundError' || n === 'DevicesNotFoundError')
+          txt = 'Nenhuma câmera encontrada neste aparelho. Use um celular ou um computador com webcam.';
+        else if (n === 'NotReadableError' || n === 'TrackStartError')
+          txt = 'A câmera está sendo usada por outro programa. Feche-o e tente de novo.';
+        else txt = 'Não foi possível abrir a câmera (' + (n || 'erro') + ').';
+        erro({ message: txt });
+      })
+      .then(function () { el('btnCamera').disabled = false; });
+  };
+
+  el('btnCapturar').onclick = function () {
+    var v = el('video');
+    if (!v.videoWidth) { erro({ message: 'A câmera ainda está abrindo. Tente de novo.' }); return; }
+    var esc = Math.min(1, LADO_MAX / Math.max(v.videoWidth, v.videoHeight));
+    var c = document.createElement('canvas');
+    c.width = Math.round(v.videoWidth * esc); c.height = Math.round(v.videoHeight * esc);
+    var ctx = c.getContext('2d');
+    ctx.translate(c.width, 0); ctx.scale(-1, 1);
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+    pararCamera();
+    c.toBlob(function (blob) {
+      fotoBlob = blob;
+      fotoHora = Date.now();
+      el('foto').src = URL.createObjectURL(blob);
+      el('boxVideo').style.display = 'none';
+      el('boxFoto').style.display = 'block';
+      el('btnCapturar').classList.add('oculto');
+      el('btnCamera').classList.remove('oculto');
+      el('btnCamera').textContent = 'Tirar de novo';
+      el('dicaSelfie').textContent = 'Selfie pronta. Confira se o rosto aparece bem.';
+      atualizarBotao();
+    }, 'image/jpeg', 0.65);
+  };
+
+  function pararCamera() {
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+  }
+
+  function limparFoto() {
+    pararCamera();
+    fotoBlob = null; fotoHora = 0;
+    el('foto').removeAttribute('src');
+    el('boxFoto').style.display = 'none';
+    el('boxVideo').style.display = 'none';
+    el('btnCapturar').classList.add('oculto');
+    el('btnCamera').classList.remove('oculto');
+    el('btnCamera').textContent = 'Abrir câmera';
+    el('dicaSelfie').textContent = 'Posicione o rosto dentro do contorno, em local iluminado.';
+    atualizarBotao();
+  }
+
+  /* ---------- GPS, ENVIO DA FOTO E REGISTRO ---------- */
+  function pegarGps() {
+    return new Promise(function (ok) {
+      if (!navigator.geolocation) { ok({ pos: null, motivo: 'indisponivel' }); return; }
+      navigator.geolocation.getCurrentPosition(
+        function (pos) { ok({ pos: pos }); },
+        function (e) { ok({ pos: null, motivo: e && e.code === 1 ? 'negado' : 'falhou' }); },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    });
+  }
+
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (ch) {
+      var r = Math.random() * 16 | 0; return (ch === 'x' ? r : (r & 3 | 8)).toString(16);
+    });
+  }
+
+  function enviarFoto() {
+    if (!fotoBlob) return Promise.resolve(null);
+    var d = new Date();
+    var caminho = escola.id + '/' + d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + uuid() + '.jpg';
+    return sb.storage.from('selfies').upload(caminho, fotoBlob, { contentType: 'image/jpeg', upsert: false })
+      .then(function (r) {
+        if (r.error) throw new Error('Não consegui enviar a selfie (' + r.error.message + '). Tente de novo.');
+        return caminho;
+      });
+  }
+
+  el('btnRegistrar').onclick = function () {
+    limparMsg();
+    if (escola.exigirSelfie && (!fotoBlob || Date.now() - fotoHora > VALIDADE_FOTO_MS)) {
+      limparFoto();
+      erro({ message: 'A selfie expirou. Tire outra para registrar o ponto.' });
+      return;
+    }
+    var b = this, colab = colabSel(), gps = null;
+    b.disabled = true; b.textContent = 'Obtendo localização...';
+    pegarGps()
+      .then(function (g) {
+        if (!g.pos && escola.exigirGps) {
+          throw new Error(g.motivo === 'negado'
+            ? 'A localização foi bloqueada. Toque no cadeado ao lado do endereço do site, permita a Localização e tente de novo.'
+            : 'Não consegui sua localização. Ligue o GPS do aparelho e tente de novo.');
+        }
+        gps = g.pos;
+        b.textContent = 'Enviando selfie...';
+        return enviarFoto();
+      })
+      .then(function (caminho) {
+        b.textContent = 'Registrando...';
+        return rpc('app_registrar', {
+          p_codigo: codigo, p_colaborador: colab.id, p_pin: el('pin').value || null, p_tipo: tipoSel,
+          p_lat: gps ? gps.coords.latitude : null, p_lng: gps ? gps.coords.longitude : null,
+          p_precisao: gps ? gps.coords.accuracy : null, p_foto: caminho, p_ua: navigator.userAgent
+        });
+      })
+      .then(function (r) {
+        gravarLocal('ponto_colab_' + escola.codigo, colab.id);
+        mostrar('ok', ['Registrado: ' + r.tipo + ' às ' + r.hora, r.nome + ' · ' + r.data]);
+        b.textContent = 'Registrar ponto';
+        limparFoto();
+        atualizarTipos();
+      })
+      .catch(function (e) {
+        erro(e);
+        b.textContent = 'Registrar ponto';
+        if (/selfie/i.test(e.message || '')) limparFoto();
+        atualizarBotao();
+      });
+  };
+
+  function mostrar(tipo, linhas) {
+    var m = el('msg');
+    m.className = 'msg ' + tipo;
+    m.innerHTML = '';
+    linhas.forEach(function (t, i) {
+      var div = document.createElement('div');
+      div.textContent = t;
+      if (i === 0) div.style.fontWeight = '700';
+      m.appendChild(div);
+    });
+    m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function limparMsg() { el('msg').className = 'msg'; }
+  function erro(e) { mostrar('erro', [(e && e.message) ? e.message : String(e)]); }
+</script>
+</body>
+</html>
