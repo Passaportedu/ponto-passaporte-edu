@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0b5394">
+<meta name="theme-color" content="#000179">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ponto">
 <title>Registro de Ponto</title>
@@ -13,11 +13,13 @@
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
-  :root { --azul:#0b5394; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --fundo:#f3f6fa; }
+  :root { --azul:#000179; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --fundo:#f3f6fa; }
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--fundo); color:#202124; }
   header { background:var(--azul); color:#fff; padding:18px 16px; text-align:center; }
   header h1 { margin:0; font-size:18px; font-weight:600; }
+  #logo { height:46px; max-width:85%; display:block; margin:0 auto 4px; }
+  .pin { -webkit-text-security:disc; text-security:disc; letter-spacing:4px; }
   #unidade { font-size:13px; opacity:.85; margin-top:2px; }
   #relogio { font-size:42px; font-weight:700; margin-top:6px; font-variant-numeric:tabular-nums; }
   #dataHoje { font-size:14px; opacity:.85; text-transform:capitalize; }
@@ -48,6 +50,7 @@
 </head>
 <body>
 <header>
+  <img id="logo" class="oculto" alt="">
   <h1 id="titulo">Registro de Ponto</h1>
   <div id="unidade"></div>
   <div id="relogio">--:--:--</div>
@@ -59,11 +62,11 @@
   <div id="app" class="oculto">
     <div class="card">
       <label for="busca">Seu nome</label>
-      <input id="busca" placeholder="Digite para procurar" autocomplete="off">
+      <input id="busca" name="filtro-colaborador" type="search" placeholder="Digite para procurar" autocomplete="off" autocorrect="off" spellcheck="false">
       <select id="nome" style="margin-top:8px"></select>
       <div id="boxPin" style="display:none; margin-top:12px">
         <label for="pin">PIN</label>
-        <input id="pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+        <input id="pin" name="codigo-ponto" class="pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" autocorrect="off" spellcheck="false">
       </div>
     </div>
 
@@ -97,7 +100,9 @@
   var TIPOS = ['Entrada', 'Saída intervalo', 'Retorno intervalo', 'Saída'];
   var VALIDADE_FOTO_MS = 3 * 60 * 1000;   // selfie vale por 3 minutos
   var LADO_MAX = 400;                      // tamanho máximo da foto em pixels
-  var sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY,
+  // Aceita a URL colada com /rest/v1, /auth/v1 ou barra no fim: usa só https://xxxx.supabase.co
+  function urlBase(u) { try { return new URL(String(u).trim()).origin; } catch (e) { return String(u).trim(); } }
+  var sb = supabase.createClient(urlBase(CFG.SUPABASE_URL), String(CFG.SUPABASE_KEY).trim(),
     { auth: { persistSession: false, autoRefreshToken: false } });
 
   var escola = null, codigo = null, tipoSel = null;
@@ -105,6 +110,12 @@
 
   function el(id) { return document.getElementById(id); }
   el('titulo').textContent = CFG.NOME_SISTEMA || 'Registro de Ponto';
+  if (CFG.COR_PRINCIPAL) document.documentElement.style.setProperty('--azul', CFG.COR_PRINCIPAL);
+  if (CFG.LOGO) {
+    el('logo').src = CFG.LOGO; el('logo').alt = CFG.NOME_REDE || '';
+    el('logo').onload = function () { el('logo').classList.remove('oculto'); el('titulo').style.fontSize = '14px'; el('titulo').style.opacity = '.85'; };
+  }
+  el('pin').addEventListener('input', function () { this.value = this.value.replace(/\D/g, ''); });
 
   function tick() {
     var d = new Date();

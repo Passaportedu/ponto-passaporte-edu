@@ -9,11 +9,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
-  :root { --azul:#0b5394; --azul2:#e8f0fe; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --linha:#dadce0; --fundo:#f3f6fa; }
+  :root { --azul:#000179; --azul2:#e8f0fe; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --linha:#dadce0; --fundo:#f3f6fa; }
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--fundo); color:#202124; font-size:14px; }
   header { background:var(--azul); color:#fff; padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-  header h1 { margin:0; font-size:17px; flex:1; min-width:160px; }
+  header h1 { margin:0; font-size:17px; flex:1; min-width:160px; display:flex; align-items:center; gap:12px; }
+  header h1 img { height:34px; }
+  #loginLogo { display:block; margin:0 auto 6px; max-width:100%; height:56px; background:var(--azul); border-radius:8px; padding:6px 10px; box-sizing:content-box; }
   header select { font-size:14px; padding:6px 8px; border-radius:8px; border:0; width:auto; max-width:100%; }
   header button { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.6); border-radius:8px; padding:6px 10px; cursor:pointer; }
   nav { display:flex; gap:4px; padding:8px 12px 0; overflow-x:auto; background:#fff; border-bottom:1px solid var(--linha); }
@@ -80,6 +82,7 @@
 
 <div id="login" class="oculto">
   <div class="card">
+    <img id="loginLogo" class="oculto" alt="">
     <h2 id="loginTitulo">Painel do Ponto</h2>
     <div><label>E-mail</label><input id="lEmail" type="email" autocomplete="username"></div>
     <div id="boxSenha"><label>Senha</label><input id="lSenha" type="password" autocomplete="current-password"></div>
@@ -261,9 +264,13 @@ var TIPOS = ['Entrada', 'Saída intervalo', 'Retorno intervalo', 'Saída'];
 var DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 var MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 var CODIGOS = { F:'Falta', FJ:'Falta justificada', AT:'Atestado', FE:'Férias', FER:'Feriado', PF:'Ponto facultativo', SE:'Serviço externo', AJ:'Ajuste' };
-var sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY, { auth: { storageKey: 'ponto-painel' } });
+  // Aceita a URL colada com /rest/v1, /auth/v1 ou barra no fim: usa só https://xxxx.supabase.co
+  function urlBase(u) { try { return new URL(String(u).trim()).origin; } catch (e) { return String(u).trim(); } }
+var sb = supabase.createClient(urlBase(CFG.SUPABASE_URL), String(CFG.SUPABASE_KEY).trim(), { auth: { storageKey: 'ponto-painel' } });
 
 var usuario = null, perfil = null, escolas = [], escola = null, colabs = [];
+if (CFG.COR_PRINCIPAL) document.documentElement.style.setProperty('--azul', CFG.COR_PRINCIPAL);
+if (CFG.LOGO) { el('loginLogo').src = CFG.LOGO; el('loginLogo').onload = function () { el('loginLogo').classList.remove('oculto'); }; }
 
 /* ===================== UTILITÁRIOS ===================== */
 function el(id) { return document.getElementById(id); }
@@ -356,7 +363,7 @@ function iniciar() {
     if (!p) { el('spEmail').textContent = usuario.email; el('semPerfil').classList.remove('oculto'); return; }
     return carregarEscolas().then(function () {
       el('painel').classList.remove('oculto');
-      el('hTitulo').textContent = CFG.NOME_SISTEMA || 'Painel do Ponto';
+      el('hTitulo').innerHTML = (CFG.LOGO ? '<img src="' + esc(CFG.LOGO) + '" alt="">' : '') + '<span>' + esc(CFG.NOME_SISTEMA || 'Painel do Ponto') + '</span>';
       el('hUsuario').textContent = (p.nome || usuario.email) + (ehRede() ? ' · Rede' : ' · Gestor');
       document.querySelectorAll('.soRede').forEach(function (b) { b.classList.toggle('oculto', !ehRede()); });
       if (ehRede()) limparSelfiesAntigas();
