@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="espelho.js"></script>
 <style>
   :root { --azul:#000179; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --fundo:#f3f6fa; }
   * { box-sizing:border-box; }
@@ -46,6 +47,7 @@
   .oculto { display:none !important; }
   #carregando { text-align:center; padding:30px 16px; color:var(--cinza); }
   .aviso { font-size:12px; color:var(--cinza); text-align:center; line-height:1.4; margin-top:14px; }
+  @media print { header, #app, #carregando, #msg, .aviso, .naoimprime { display:none !important; } main { padding:0; max-width:none; } #espelhoView { margin:0 !important; } }
 </style>
 </head>
 <body>
@@ -89,8 +91,24 @@
     </div>
 
     <button id="btnRegistrar" disabled>Registrar ponto</button>
+
+    <div class="card" style="margin-top:14px">
+      <span class="titulo">Meu espelho de ponto</span>
+      <div class="dica" style="margin:0 0 8px">Confira suas marcações do mês. Use o seu nome e PIN acima.</div>
+      <div style="display:flex;gap:8px">
+        <input type="month" id="espMes" style="flex:1">
+        <button class="btn2" id="btnEspelho" style="width:auto;padding:12px 16px">Ver</button>
+      </div>
+    </div>
   </div>
   <div id="msg" class="msg"></div>
+  <div id="espelhoView" class="oculto" style="margin:14px -16px 0">
+    <div style="display:flex;gap:8px;padding:0 16px 10px" class="naoimprime">
+      <button class="btn2" id="btnEspFechar" style="width:auto;padding:10px 14px">Fechar</button>
+      <button class="btn2 cheio" id="btnEspImprimir" style="width:auto;padding:10px 14px">Salvar PDF / imprimir</button>
+    </div>
+    <div style="overflow-x:auto;padding:0 8px" id="espelhoFolha"></div>
+  </div>
   <p class="aviso">O horário gravado é o do servidor, não o do aparelho. Para controle de jornada, a escola registra sua selfie
     (guardada por 90 dias) e sua localização no momento da batida.</p>
 </main>
@@ -407,6 +425,31 @@
         atualizarBotao();
       });
   };
+
+  /* ---------- MEU ESPELHO (Portaria 671, art. 84, parágrafo único) ---------- */
+  (function () {
+    var d = new Date(); el('espMes').value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  })();
+  el('btnEspelho').onclick = function () {
+    limparMsg();
+    var colab = colabSel(), ym = el('espMes').value, pin = el('pin').value;
+    if (!colab) { erro({ message: 'Escolha o seu nome na lista acima.' }); return; }
+    if (!pin) { el('boxPin').style.display = 'block'; el('pin').focus(); erro({ message: 'Digite o seu PIN acima para ver o espelho.' }); return; }
+    if (!ym) { erro({ message: 'Escolha o mês.' }); return; }
+    var b = this; b.disabled = true; b.textContent = '...';
+    rpc('app_espelho', { p_codigo: codigo, p_colaborador: colab.id, p_pin: pin, p_ano: Number(ym.slice(0, 4)), p_mes: Number(ym.slice(5, 7)) })
+      .then(function (r) {
+        var hoje = new Intl.DateTimeFormat('en-CA', { timeZone: (r.escola && r.escola.fuso) || 'America/Bahia' }).format(new Date());
+        el('espelhoFolha').innerHTML = Espelho.montar({ escola: r.escola, colaborador: r.colaborador, ym: ym, emissao: r.emissao, hoje: hoje,
+          nomeRede: CFG.NOME_REDE, registros: r.registros, tratamentos: r.tratamentos, ocorrencias: r.ocorrencias });
+        el('espelhoView').classList.remove('oculto');
+        el('espelhoView').scrollIntoView({ behavior: 'smooth' });
+      })
+      .catch(erro)
+      .then(function () { b.disabled = false; b.textContent = 'Ver'; });
+  };
+  el('btnEspFechar').onclick = function () { el('espelhoView').classList.add('oculto'); el('espelhoFolha').innerHTML = ''; };
+  el('btnEspImprimir').onclick = function () { window.print(); };
 
   function mostrar(tipo, linhas) {
     var m = el('msg');

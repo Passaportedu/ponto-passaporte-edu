@@ -8,6 +8,7 @@
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="espelho.js"></script>
 <style>
   :root { --azul:#000179; --azul2:#e8f0fe; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --linha:#dadce0; --fundo:#f3f6fa; }
   * { box-sizing:border-box; }
@@ -143,14 +144,17 @@
           <div><label>Matrícula / CPF</label><input id="cMatricula"></div>
           <div><label>Cargo</label><input id="cCargo"></div>
           <div><label>Setor</label><input id="cSetor"></div>
-          <div><label>Jornada</label><input id="cJornada" placeholder="08:00-12:00 / 14:00-18:00"></div>
+          <div><label>CPF</label><input id="cCpf" inputmode="numeric" placeholder="000.000.000-00"></div>
+          <div><label>Data de admissão</label><input id="cAdmissao" type="date"></div>
+          <div><label>Horário contratual</label><input id="cJornada" placeholder="Seg a sex, 08:00-12:00 / 14:00-18:00"></div>
+          <div><label>Jornada semanal (horas)</label><input id="cCarga" type="number" min="1" max="44" step="0.5" placeholder="40"></div>
           <div class="linha"><button class="b" id="cSalvar">Salvar</button><button class="b2 oculto" id="cCancelar">Cancelar</button></div>
         </div>
       </div>
       <div class="card">
         <details>
           <summary style="cursor:pointer;font-weight:600">Cadastrar vários de uma vez</summary>
-          <p class="dica">Um colaborador por linha, no formato: <b>Nome; Matrícula; Cargo; Setor; Jornada</b> (só o nome é obrigatório). Dá para colar direto de uma planilha.</p>
+          <p class="dica">Um colaborador por linha, no formato: <b>Nome; Matrícula; Cargo; Setor; Horário contratual; CPF; Admissão (dd/mm/aaaa); Horas semanais</b> (só o nome é obrigatório). Dá para colar direto de uma planilha.</p>
           <textarea id="cLote" placeholder="Maria da Silva; 12345; Professora; Pedagógico; 08:00-12:00"></textarea>
           <button class="b" id="cLoteSalvar" style="margin-top:8px">Cadastrar lista</button>
         </details>
@@ -186,9 +190,30 @@
         <p class="dica" style="margin-top:8px">PDF ou foto (JPG/PNG) de até 5 MB. No celular, dá para fotografar o atestado direto. Fotos grandes são reduzidas automaticamente.</p>
         <input type="file" id="oArqLinha" accept="application/pdf,image/jpeg,image/png,image/*" class="oculto">
       </div>
+      <div class="card">
+        <h2>Tratar marcação</h2>
+        <p class="dica">Corrige o ponto sem mexer na batida original: a marcação registrada continua guardada e o espelho mostra as duas, com o motivo (Portaria 671, art. 84, V). Um tratamento errado é anulado, nunca apagado.</p>
+        <div class="grade">
+          <div><label>Colaborador</label><select id="tColab"></select></div>
+          <div><label>Data</label><input type="date" id="tData"></div>
+          <div><label>Ação</label>
+            <select id="tAcao">
+              <option value="incluida">Incluir marcação (esquecida ou com falha)</option>
+              <option value="desconsiderada">Desconsiderar marcação registrada</option>
+              <option value="pre_assinalada">Pré-assinalar (ex.: intervalo)</option>
+            </select></div>
+          <div><label>Marcação</label>
+            <select id="tTipo"><option>Entrada</option><option>Saída intervalo</option><option>Retorno intervalo</option><option>Saída</option></select></div>
+          <div><label>Hora</label><input type="time" id="tHora"></div>
+          <div><label>Motivo (obrigatório)</label><input id="tMotivo" placeholder="Ex.: esqueceu de registrar a saída"></div>
+          <div><button class="b" id="tSalvar">Registrar tratamento</button></div>
+        </div>
+      </div>
       <div class="card rolagem">
         <div class="linha" style="margin-bottom:8px"><label style="margin:0">Mês</label><input type="month" id="oMes" style="width:auto"></div>
         <table class="tabela" id="oTabela"></table>
+        <h2 style="margin:18px 0 8px">Marcações tratadas no mês</h2>
+        <table class="tabela" id="tTabela"></table>
       </div>
     </section>
 
@@ -217,6 +242,10 @@
         <div class="grade">
           <div><label>Código (vai no QR) *</label><input id="esCodigo" placeholder="CAM-01" style="text-transform:uppercase"></div>
           <div><label>Nome da escola *</label><input id="esNome" placeholder="Passaporte Edu Camaçari"></div>
+          <div><label>CNPJ da escola *</label><input id="esCnpj" inputmode="numeric" maxlength="18" placeholder="00.000.000/0000-00" autocomplete="off">
+            <div class="dica" id="esCnpjInfo">Sai no cabeçalho do espelho de ponto (Portaria 671, art. 84). Empregador pessoa física: digite o CPF.</div></div>
+          <div><label>Razão social *</label><input id="esRazao" placeholder="Como está no cartão CNPJ" autocomplete="off"></div>
+          <div><label>CEI/CAEPF/CNO (se houver)</label><input id="esCei" autocomplete="off"></div>
           <div><label>Cidade</label><input id="esCidade"></div>
           <div><label>UF</label><input id="esUf" maxlength="2" style="text-transform:uppercase"></div>
           <div><label>Fuso horário</label>
@@ -396,7 +425,7 @@ el('selEscola').onchange = function () {
 };
 function carregarColabs() {
   if (!escola) { colabs = []; return Promise.resolve(); }
-  return sb.from('colaboradores').select('id,escola_id,nome,matricula,cargo,setor,jornada,pin_definido,ativo,criado_em')
+  return sb.from('colaboradores').select('id,escola_id,nome,matricula,cargo,setor,jornada,pin_definido,ativo,criado_em,cpf,data_admissao,carga_semanal')
     .eq('escola_id', escola.id).order('nome').then(ok).then(function (l) { colabs = l; });
 }
 function opcoesColab(incluirTodos, soAtivos) {
@@ -470,14 +499,14 @@ el('cInativos').onchange = desenharColabs;
 function desenharColabs() {
   var mostrarInativos = el('cInativos').checked;
   var lista = colabs.filter(function (c) { return mostrarInativos || c.ativo; });
-  var h = '<tr><th>Nome</th><th>Matrícula</th><th>Cargo</th><th>Setor</th><th>Jornada</th><th>PIN</th><th></th></tr>';
+  var h = '<tr><th>Nome</th><th>CPF</th><th>Cargo</th><th>Setor</th><th>Horário</th><th>Admissão</th><th>PIN</th><th></th></tr>';
   lista.forEach(function (c) {
-    h += '<tr' + (c.ativo ? '' : ' style="opacity:.55"') + '><td>' + esc(c.nome) + '</td><td>' + esc(c.matricula) + '</td><td>' + esc(c.cargo) + '</td><td>' + esc(c.setor) +
-      '</td><td>' + esc(c.jornada) + '</td><td>' + (c.pin_definido ? '<span class="tag ok">definido</span>' : '<span class="tag alerta">sem PIN</span>') +
+    h += '<tr' + (c.ativo ? '' : ' style="opacity:.55"') + '><td>' + esc(c.nome) + '</td><td>' + (c.cpf ? Espelho.fmtCpf(c.cpf) : '<span class="tag alerta">falta</span>') + '</td><td>' + esc(c.cargo) + '</td><td>' + esc(c.setor) +
+      '</td><td>' + esc(c.jornada) + (c.carga_semanal ? ' (' + String(c.carga_semanal).replace('.', ',') + 'h/sem)' : '') + '</td><td>' + (c.data_admissao ? dataBr(c.data_admissao) : '<span class="tag alerta">falta</span>') + '</td><td>' + (c.pin_definido ? '<span class="tag ok">definido</span>' : '<span class="tag alerta">sem PIN</span>') +
       '</td><td class="linha"><button class="b2" data-editar="' + c.id + '">Editar</button><button class="b2" data-pin="' + c.id + '">PIN</button>' +
       '<button class="b2' + (c.ativo ? ' perigo' : '') + '" data-ativo="' + c.id + '">' + (c.ativo ? 'Desativar' : 'Reativar') + '</button></td></tr>';
   });
-  if (!lista.length) h += '<tr><td colspan="7" class="dica">Nenhum colaborador.</td></tr>';
+  if (!lista.length) h += '<tr><td colspan="8" class="dica">Nenhum colaborador.</td></tr>';
   el('cTabela').innerHTML = h;
 }
 el('cTabela').onclick = function (ev) {
@@ -487,6 +516,7 @@ el('cTabela').onclick = function (ev) {
   if (b.dataset.editar) {
     el('cId').value = c.id; el('cNome').value = c.nome; el('cMatricula').value = c.matricula || '';
     el('cCargo').value = c.cargo || ''; el('cSetor').value = c.setor || ''; el('cJornada').value = c.jornada || '';
+    el('cCpf').value = c.cpf ? Espelho.fmtCpf(c.cpf) : ''; el('cAdmissao').value = c.data_admissao || ''; el('cCarga').value = c.carga_semanal || '';
     el('cTitulo').textContent = 'Editar colaborador'; el('cCancelar').classList.remove('oculto');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } else if (b.dataset.pin) {
@@ -503,34 +533,45 @@ el('cTabela').onclick = function (ev) {
   }
 };
 function limparFormColab() {
-  ['cId', 'cNome', 'cMatricula', 'cCargo', 'cSetor', 'cJornada'].forEach(function (i) { el(i).value = ''; });
+  ['cId', 'cNome', 'cMatricula', 'cCargo', 'cSetor', 'cJornada', 'cCpf', 'cAdmissao', 'cCarga'].forEach(function (i) { el(i).value = ''; });
   el('cTitulo').textContent = 'Novo colaborador'; el('cCancelar').classList.add('oculto');
 }
 el('cCancelar').onclick = limparFormColab;
 el('cSalvar').onclick = function () {
   var dados = { nome: el('cNome').value.trim(), matricula: el('cMatricula').value.trim() || null, cargo: el('cCargo').value.trim() || null,
-    setor: el('cSetor').value.trim() || null, jornada: el('cJornada').value.trim() || null };
+    setor: el('cSetor').value.trim() || null, jornada: el('cJornada').value.trim() || null,
+    cpf: el('cCpf').value.replace(/\D/g, '') || null, data_admissao: el('cAdmissao').value || null,
+    carga_semanal: el('cCarga').value ? Number(el('cCarga').value) : null };
   if (dados.nome.length < 2) { toast('Informe o nome.'); return; }
+  if (dados.cpf && !Espelho.cpfValido(dados.cpf)) { toast('CPF inválido. Confira os números.'); return; }
+  if (dados.carga_semanal != null && (dados.carga_semanal < 1 || dados.carga_semanal > 44)) { toast('A jornada semanal deve ficar entre 1 e 44 horas.'); return; }
   var id = el('cId').value;
   var q = id ? sb.from('colaboradores').update(dados).eq('id', id)
              : sb.from('colaboradores').insert(Object.assign({ escola_id: escola.id }, dados));
   q.then(ok).then(function () { toast(id ? 'Colaborador atualizado.' : 'Colaborador cadastrado. Defina o PIN dele(a).'); limparFormColab(); return carregarColabs(); })
-    .then(desenharColabs).catch(function (e) { falha(/duplicate|unique/i.test(e.message) ? new Error('Já existe um colaborador com esse nome nesta escola.') : e); });
+    .then(desenharColabs).catch(function (e) { falha(/cpf/i.test(e.message) ? new Error('Esse CPF já está cadastrado nesta escola ou é inválido.') : /duplicate|unique/i.test(e.message) ? new Error('Já existe um colaborador com esse nome nesta escola.') : e); });
 };
 el('cLoteSalvar').onclick = function () {
   var existentes = {}; colabs.forEach(function (c) { existentes[c.nome.toLowerCase()] = 1; });
   var linhas = el('cLote').value.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
-  var novos = [], repetidos = 0;
+  var novos = [], repetidos = 0, invalidos = [];
   linhas.forEach(function (l) {
     var p = l.split(/\t|;/).map(function (x) { return x.trim(); });
     if (!p[0] || p[0].length < 2) return;
     if (existentes[p[0].toLowerCase()]) { repetidos++; return; }
     existentes[p[0].toLowerCase()] = 1;
-    novos.push({ escola_id: escola.id, nome: p[0], matricula: p[1] || null, cargo: p[2] || null, setor: p[3] || null, jornada: p[4] || null });
+    var cpf = (p[5] || '').replace(/\D/g, '') || null;
+    if (cpf && !Espelho.cpfValido(cpf)) { invalidos.push(p[0]); cpf = null; }
+    var adm = null, m = (p[6] || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) adm = m[3] + '-' + m[2] + '-' + m[1];
+    var carga = p[7] ? Number(String(p[7]).replace(',', '.')) : null;
+    if (!(carga >= 1 && carga <= 44)) carga = null;
+    novos.push({ escola_id: escola.id, nome: p[0], matricula: p[1] || null, cargo: p[2] || null, setor: p[3] || null, jornada: p[4] || null,
+      cpf: cpf, data_admissao: adm, carga_semanal: carga });
   });
   if (!novos.length) { toast(repetidos ? 'Todos os nomes já estavam cadastrados.' : 'Nada para cadastrar.'); return; }
   sb.from('colaboradores').insert(novos).then(ok).then(function () {
-    toast(novos.length + ' cadastrado(s)' + (repetidos ? ', ' + repetidos + ' já existia(m)' : '') + '. Defina os PINs.');
+    toast(novos.length + ' cadastrado(s)' + (repetidos ? ', ' + repetidos + ' já existia(m)' : '') + (invalidos.length ? '. CPF inválido (ficou em branco): ' + invalidos.join(', ') : '') + '. Defina os PINs.', invalidos.length ? 8000 : 3500);
     el('cLote').value = ''; return carregarColabs();
   }).then(desenharColabs).catch(falha);
 };
@@ -538,6 +579,8 @@ el('cLoteSalvar').onclick = function () {
 /* ===================== OCORRÊNCIAS ===================== */
 function telaOcor() {
   el('oColab').innerHTML = opcoesColab(false, false);
+  el('tColab').innerHTML = opcoesColab(false, false);
+  if (!el('tData').value) el('tData').value = hojeNoFuso(escola.fuso);
   if (!el('oData').value) el('oData').value = hojeNoFuso(escola.fuso);
   if (!el('oMes').value) el('oMes').value = mesAtual();
   carregarOcor();
@@ -546,6 +589,7 @@ el('oMes').onchange = carregarOcor;
 var ocorrencias = [];
 function carregarOcor() {
   var ym = el('oMes').value;
+  carregarTrat(ym);
   sb.from('ocorrencias').select('id,colaborador_id,data,codigo,observacao,anexo_path,anexo_nome').eq('escola_id', escola.id)
     .gte('data', ym + '-01').lte('data', fimMes(ym)).order('data').then(ok).then(function (l) {
       ocorrencias = l;
@@ -660,6 +704,54 @@ el('oSalvar').onclick = function () {
   }).then(function () { bt.disabled = false; bt.textContent = 'Lançar'; });
 };
 
+/* ---------- TRATAMENTO DE MARCAÇÕES (art. 84, V) ---------- */
+var ACOES = { incluida: 'Incluída', desconsiderada: 'Desconsiderada', pre_assinalada: 'Pré-assinalada' };
+var tratamentos = [];
+el('tAcao').onchange = function () { el('tHora').disabled = this.value === 'desconsiderada'; if (el('tHora').disabled) el('tHora').value = ''; };
+function carregarTrat(ym) {
+  sb.from('tratamentos').select('id,colaborador_id,data,acao,tipo,hora,registro_id,motivo,criado_em,anulado_em')
+    .eq('escola_id', escola.id).gte('data', ym + '-01').lte('data', fimMes(ym)).order('data').then(ok).then(function (l) {
+      tratamentos = l;
+      var nomes = {}; colabs.forEach(function (c) { nomes[c.id] = c.nome; });
+      var h = '<tr><th>Data</th><th>Colaborador</th><th>Ação</th><th>Marcação</th><th>Hora</th><th>Motivo</th><th></th></tr>';
+      l.forEach(function (t) {
+        var anulado = !!t.anulado_em;
+        h += '<tr' + (anulado ? ' style="opacity:.5;text-decoration:line-through"' : '') + '><td>' + dataBr(t.data) + '</td><td>' + esc(nomes[t.colaborador_id]) +
+          '</td><td>' + ACOES[t.acao] + '</td><td>' + esc(t.tipo) + '</td><td>' + (t.hora ? String(t.hora).slice(0, 5) : '–') + '</td><td>' + esc(t.motivo) +
+          '</td><td>' + (anulado ? '<span class="dica" style="text-decoration:none">anulado</span>' : '<button class="b2 perigo" data-anular="' + t.id + '">Anular</button>') + '</td></tr>';
+      });
+      if (!l.length) h += '<tr><td colspan="7" class="dica">Nenhuma marcação tratada neste mês.</td></tr>';
+      el('tTabela').innerHTML = h;
+    }).catch(falha);
+}
+el('tTabela').onclick = function (ev) {
+  var b = ev.target.closest('[data-anular]'); if (!b) return;
+  if (!confirm('Anular este tratamento? Ele continua no histórico, mas deixa de valer no espelho.')) return;
+  sb.from('tratamentos').update({ anulado_em: new Date().toISOString() }).eq('id', b.dataset.anular).then(ok)
+    .then(function () { toast('Tratamento anulado.'); carregarTrat(el('oMes').value); }).catch(falha);
+};
+el('tSalvar').onclick = function () {
+  var colab = el('tColab').value, data = el('tData').value, acao = el('tAcao').value, tipo = el('tTipo').value;
+  var hora = el('tHora').value, motivo = el('tMotivo').value.trim();
+  if (!colab || !data) { toast('Escolha o colaborador e a data.'); return; }
+  if (motivo.length < 3) { toast('Informe o motivo do tratamento.'); return; }
+  if (acao !== 'desconsiderada' && !hora) { toast('Informe a hora da marcação.'); return; }
+  var base = { escola_id: escola.id, colaborador_id: colab, data: data, acao: acao, tipo: tipo, motivo: motivo };
+  var passo = acao === 'desconsiderada'
+    ? sb.from('registros').select('id,hora_local').eq('colaborador_id', colab).eq('data_local', data).eq('tipo', tipo).order('hora_local').then(ok)
+        .then(function (rs) {
+          if (!rs.length) throw new Error('Não há marcação de "' + tipo + '" registrada nesse dia para desconsiderar.');
+          return Object.assign(base, { registro_id: rs[0].id });
+        })
+    : Promise.resolve(Object.assign(base, { hora: hora }));
+  passo.then(function (dados) { return sb.from('tratamentos').insert(dados).then(ok); })
+    .then(function () {
+      toast('Tratamento registrado.'); el('tMotivo').value = ''; el('tHora').value = '';
+      var ym = data.slice(0, 7); if (el('oMes').value !== ym) { el('oMes').value = ym; carregarOcor(); } else carregarTrat(ym);
+    })
+    .catch(function (e) { falha(/duplicate|unique/i.test(e.message) ? new Error('Já existe um tratamento ativo para essa marcação. Anule o anterior primeiro.') : e); });
+};
+
 /* ===================== ESPELHO ===================== */
 function telaEspelho() {
   var atual = el('eColab').value;
@@ -672,11 +764,15 @@ el('eImprimir').onclick = function () { window.print(); };
 function dadosMes(ym) {
   return Promise.all([
     buscarTudo(function () {
-      return sb.from('registros').select('colaborador_id,tipo,data_local,hora_local,no_local')
+      return sb.from('registros').select('id,colaborador_id,tipo,data_local,hora_local,no_local')
         .eq('escola_id', escola.id).gte('data_local', ym + '-01').lte('data_local', fimMes(ym)).order('data_local').order('hora_local');
     }),
     buscarTudo(function () {
       return sb.from('ocorrencias').select('colaborador_id,data,codigo,observacao,anexo_path')
+        .eq('escola_id', escola.id).gte('data', ym + '-01').lte('data', fimMes(ym));
+    }),
+    buscarTudo(function () {
+      return sb.from('tratamentos').select('id,colaborador_id,data,acao,tipo,hora,registro_id,motivo,anulado_em')
         .eq('escola_id', escola.id).gte('data', ym + '-01').lte('data', fimMes(ym));
     })
   ]);
@@ -686,66 +782,27 @@ function gerarEspelho() {
   if (!ym) { toast('Escolha o mês.'); return; }
   el('eFolhas').innerHTML = '<div class="card dica">Gerando...</div>';
   dadosMes(ym).then(function (r) {
-    var regs = r[0], ocs = r[1];
+    var regs = r[0], ocs = r[1], trats = r[2].filter(function (t) { return !t.anulado_em; });
     var lista = alvo === '*' ? colabs.filter(function (c) { return c.ativo || regs.some(function (x) { return x.colaborador_id === c.id; }); })
                              : colabs.filter(function (c) { return c.id === alvo; });
-    el('eFolhas').innerHTML = lista.map(function (c) { return folha(c, ym, regs, ocs); }).join('') ||
-      '<div class="card dica">Nenhum colaborador para gerar.</div>';
+    var agora = new Intl.DateTimeFormat('sv-SE', { timeZone: escola.fuso, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date()).replace(' ', 'T');
+    var faltas = [];
+    var html = lista.map(function (c) {
+      faltas = faltas.concat(Espelho.pendenciasCadastro(escola, c));
+      return Espelho.montar({
+        escola: escola, colaborador: c, ym: ym, emissao: agora, hoje: hojeNoFuso(escola.fuso), nomeRede: CFG.NOME_REDE,
+        registros: regs.filter(function (x) { return x.colaborador_id === c.id; }),
+        tratamentos: trats.filter(function (x) { return x.colaborador_id === c.id; }),
+        ocorrencias: ocs.filter(function (x) { return x.colaborador_id === c.id; })
+      });
+    }).join('');
+    faltas = faltas.filter(function (f, i) { return faltas.indexOf(f) === i; });
+    var aviso = faltas.length ? '<div class="esp-aviso"><b>Para o espelho ficar completo pela Portaria 671 (art. 84), falta cadastrar:</b> ' + esc(faltas.slice(0, 12).join(', ')) +
+      (faltas.length > 12 ? ' e mais ' + (faltas.length - 12) + ' item(ns)' : '') + '. Os campos aparecem em vermelho na folha.</div>' : '';
+    el('eFolhas').innerHTML = (aviso + html) || '<div class="card dica">Nenhum colaborador para gerar.</div>';
+
     el('eImprimir').disabled = !lista.length;
   }).catch(falha);
-}
-function folha(c, ym, regs, ocs) {
-  var p = ym.split('-').map(Number), ano = p[0], mes = p[1], nDias = new Date(ano, mes, 0).getDate();
-  var hoje = hojeNoFuso(escola.fuso);
-  var porDia = {}, ocDia = {};
-  regs.forEach(function (r) {
-    if (r.colaborador_id !== c.id) return;
-    var d = porDia[r.data_local] = porDia[r.data_local] || {};
-    if (!d[r.tipo]) d[r.tipo] = r.hora_local.slice(0, 5);
-    if (r.no_local === 'Não') d.fora = true;
-  });
-  ocs.forEach(function (o) { if (o.colaborador_id === c.id) ocDia[o.data] = o; });
-  var total = 0, trab = 0, pend = 0, linhas = '';
-  for (var d = 1; d <= 31; d++) {
-    if (d > nDias) { linhas += '<tr class="fora"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="obs"></td></tr>'; continue; }
-    var iso = ym + '-' + ('0' + d).slice(-2), dow = new Date(ano, mes - 1, d).getDay(), fds = dow === 0 || dow === 6;
-    var b = porDia[iso] || {}, oc = ocDia[iso];
-    var e = b['Entrada'] || '', si = b['Saída intervalo'] || '', ri = b['Retorno intervalo'] || '', s = b['Saída'] || '';
-    var obs = [], horas = '', algo = e || si || ri || s;
-    if (algo) {
-      trab++;
-      if (!e) obs.push('Sem entrada');
-      if (!s) obs.push('Sem saída');
-      if (!!si !== !!ri) obs.push('Intervalo incompleto');
-      if (e && s) {
-        var m = min(s) - min(e); if (m < 0) m += 1440;
-        if (si && ri) m -= Math.max(0, min(ri) - min(si));
-        if (m > 0) { total += m; horas = hhmm(m); }
-      }
-      if (b.fora) obs.push('Fora do local');
-    } else if (!fds && iso <= hoje && !oc && (!c.criado_em || iso >= c.criado_em.slice(0, 10))) obs.push('Sem registro');
-    if (obs.length) pend++;
-    var txtOc = oc ? oc.codigo + (oc.observacao ? ': ' + oc.observacao : '') + (oc.anexo_path ? ' (documento anexado)' : '') : '';
-    var obsTxt = [txtOc].concat(obs).filter(Boolean).join('; ');
-    linhas += '<tr' + (fds ? ' class="fds"' : '') + '><td>' + ('0' + d).slice(-2) + '/' + ('0' + mes).slice(-2) + '</td><td>' + DIAS[dow] +
-      '</td><td>' + e + '</td><td>' + si + '</td><td>' + ri + '</td><td>' + s + '</td><td>' + horas + '</td><td class="obs"' +
-      (oc && !obs.length ? ' style="color:#000"' : '') + '>' + esc(obsTxt) + '</td></tr>';
-  }
-  var geradoEm = new Date().toLocaleString('pt-BR');
-  return '<div class="folha">' +
-    '<h3>' + esc((CFG.NOME_REDE && escola.nome.toLowerCase().indexOf(CFG.NOME_REDE.toLowerCase()) !== 0 ? CFG.NOME_REDE + ' · ' : '') + escola.nome).toUpperCase() + '</h3>' +
-    '<h4>ESPELHO DE PONTO · ' + MESES[mes - 1].toUpperCase() + '/' + ano + '</h4>' +
-    '<div class="ident"><div><b>Colaborador:</b> ' + esc(c.nome) + '</div><div><b>Matrícula:</b> ' + esc(c.matricula) + '</div>' +
-    '<div><b>Cargo:</b> ' + esc(c.cargo) + '</div><div><b>Setor:</b> ' + esc(c.setor) + '</div>' +
-    '<div><b>Jornada:</b> ' + esc(c.jornada) + '</div><div><b>Escola:</b> ' + esc(escola.nome) + '</div></div>' +
-    '<table><tr><th>Data</th><th>Dia</th><th>Entrada</th><th>Saída intervalo</th><th>Retorno intervalo</th><th>Saída</th><th>Horas</th><th style="width:34%">Observação</th></tr>' +
-    linhas +
-    '<tr class="total"><td colspan="6" style="text-align:right">TOTAL DE HORAS NO MÊS</td><td>' + hhmm(total) + '</td><td style="text-align:left">Dias trabalhados: ' + trab + ' · Dias com pendência: ' + pend + '</td></tr></table>' +
-    '<div class="rodape">Códigos: F falta · FJ falta justificada · AT atestado · FE férias · FER feriado · PF ponto facultativo · SE serviço externo · AJ ajuste. Gerado em ' + esc(geradoEm) + '.</div>' +
-    '<div class="decl">Declaro que os registros acima correspondem à jornada de trabalho que cumpri no período. Ausências, ajustes e pendências estão indicados na coluna Observação.</div>' +
-    '<div class="ass"><div>Assinatura do colaborador</div><div>Gestor(a) da escola</div></div>' +
-    '<div class="local">' + esc((escola.cidade || '______________') + (escola.uf ? ' - ' + escola.uf : '')) + ', ______ de ____________________ de ________.</div>' +
-    '</div>';
 }
 el('eCsv').onclick = function () {
   var ym = el('eMes').value; if (!ym) { toast('Escolha o mês.'); return; }
@@ -772,14 +829,19 @@ function urlApp(codigo) {
 }
 function telaEscolas() { limparFormEscola(); desenharEscolas(); }
 function desenharEscolas() {
-  var h = '<tr><th>Código</th><th>Escola</th><th>Cidade</th><th>Local</th><th>Raio</th><th>Regras</th><th></th></tr>';
+  var h = '<tr><th>Código</th><th>Escola</th><th>CNPJ</th><th>Cidade</th><th>Local</th><th>Raio</th><th>Regras</th><th></th></tr>';
   escolas.forEach(function (e) {
-    h += '<tr' + (e.ativa ? '' : ' style="opacity:.55"') + '><td><b>' + esc(e.codigo) + '</b></td><td>' + esc(e.nome) + '</td><td>' + esc((e.cidade || '') + (e.uf ? '/' + e.uf : '')) +
+    h += '<tr' + (e.ativa ? '' : ' style="opacity:.55"') + '><td><b>' + esc(e.codigo) + '</b></td><td>' + esc(e.nome) + '</td><td>' +
+      (e.cnpj ? '<span style="white-space:nowrap">' + esc(Espelho.fmtCnpj(e.cnpj)) + '</span>' : '<span class="tag alerta">sem CNPJ</span>') +
+      '</td><td>' + esc((e.cidade || '') + (e.uf ? '/' + e.uf : '')) +
       '</td><td>' + (e.latitude != null ? '<span class="tag ok">definido</span>' : '<span class="tag alerta">sem coordenadas</span>') +
       '</td><td>' + e.raio_m + ' m</td><td class="dica">' + (e.exigir_gps ? 'GPS' : 'sem GPS') + ' · ' + (e.exigir_selfie ? 'selfie' : 'sem selfie') +
       '</td><td class="linha"><button class="b2" data-ed="' + e.id + '">Editar</button><button class="b2" data-qr="' + e.id + '">QR Code</button></td></tr>';
   });
-  if (!escolas.length) h += '<tr><td colspan="7" class="dica">Nenhuma escola cadastrada.</td></tr>';
+  if (!escolas.length) h += '<tr><td colspan="8" class="dica">Nenhuma escola cadastrada.</td></tr>';
+  var semCnpj = escolas.filter(function (e) { return !e.cnpj || !e.razao_social; }).length;
+  if (semCnpj) h = '<caption style="text-align:left;padding:8px;background:#fff8e1;border-radius:8px;margin-bottom:6px">' +
+    semCnpj + (semCnpj > 1 ? ' escolas estão' : ' escola está') + ' sem CNPJ ou razão social. Clique em Editar e complete, senão o espelho de ponto sai com "não informado".</caption>' + h;
   el('esTabela').innerHTML = h;
 }
 el('esTabela').onclick = function (ev) {
@@ -789,6 +851,7 @@ el('esTabela').onclick = function (ev) {
     el('esId').value = e.id; el('esCodigo').value = e.codigo; el('esNome').value = e.nome; el('esCidade').value = e.cidade || '';
     el('esUf').value = e.uf || ''; el('esFuso').value = e.fuso; el('esRaio').value = e.raio_m;
     el('esCoord').value = e.latitude != null ? e.latitude + ', ' + e.longitude : '';
+    el('esRazao').value = e.razao_social || ''; el('esCnpj').value = e.cnpj ? Espelho.fmtCnpj(e.cnpj) : ''; infoCnpj(); el('esCei').value = e.cei_caepf_cno || '';
     el('esGps').checked = e.exigir_gps; el('esSelfie').checked = e.exigir_selfie; el('esAtiva').checked = e.ativa;
     el('esTitulo').textContent = 'Editar escola'; el('esCancelar').classList.remove('oculto');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -811,11 +874,31 @@ function imprimirQr() {
   setTimeout(function () { antes.forEach(function (c) { c.classList.remove('naoimprime'); }); }, 500);
 }
 function limparFormEscola() {
-  ['esId', 'esCodigo', 'esNome', 'esCidade', 'esUf', 'esCoord'].forEach(function (i) { el(i).value = ''; });
+  ['esId', 'esCodigo', 'esNome', 'esCidade', 'esUf', 'esCoord', 'esRazao', 'esCnpj', 'esCei'].forEach(function (i) { el(i).value = ''; });
   el('esFuso').value = 'America/Bahia'; el('esRaio').value = 200;
   el('esGps').checked = true; el('esSelfie').checked = true; el('esAtiva').checked = true;
   el('esTitulo').textContent = 'Nova escola'; el('esCancelar').classList.add('oculto');
+  infoCnpj();
 }
+/* Máscara e validação do CNPJ enquanto digita */
+function mascaraCnpj(v) {
+  var d = v.replace(/\D/g, '').slice(0, 14);
+  return d.replace(/^(\d{0,2})(\d{0,3})(\d{0,3})(\d{0,4})(\d{0,2}).*/, function (m, a, b, c, e, f) {
+    return a + (b ? '.' + b : '') + (c ? '.' + c : '') + (e ? '/' + e : '') + (f ? '-' + f : ''); });
+}
+function infoCnpj() {
+  var d = el('esCnpj').value.replace(/\D/g, ''), i = el('esCnpjInfo');
+  if (!d) { i.style.color = ''; i.textContent = 'Sai no cabeçalho do espelho de ponto (Portaria 671, art. 84). Empregador pessoa física: digite o CPF.'; return; }
+  if (d.length === 14 || d.length === 11) {
+    var v = Espelho.cnpjValido(d);
+    i.style.color = v ? '#0d652d' : 'var(--verm)';
+    i.textContent = v ? (d.length === 14 ? 'CNPJ válido.' : 'CPF do empregador válido.') : (d.length === 14 ? 'CNPJ inválido. Confira os números.' : 'Continue digitando (CNPJ tem 14 números).');
+    return;
+  }
+  i.style.color = ''; i.textContent = d.length + ' de 14 números.';
+}
+el('esCnpj').oninput = function () { var v = mascaraCnpj(this.value); if (v !== this.value) this.value = v; infoCnpj(); };
+el('esCnpj').onblur = function () { var d = this.value.replace(/\D/g, ''); if (d.length === 11) this.value = Espelho.fmtCpf(d); };
 el('esCancelar').onclick = limparFormEscola;
 el('esSalvar').onclick = function () {
   var codigo = el('esCodigo').value.trim().toUpperCase();
@@ -831,7 +914,12 @@ el('esSalvar').onclick = function () {
   var dados = { codigo: codigo, nome: el('esNome').value.trim(), cidade: el('esCidade').value.trim() || null,
     uf: el('esUf').value.trim().toUpperCase() || null, fuso: el('esFuso').value, latitude: lat, longitude: lng,
     raio_m: Math.min(5000, Math.max(30, parseInt(el('esRaio').value, 10) || 200)),
-    exigir_gps: el('esGps').checked, exigir_selfie: el('esSelfie').checked, ativa: el('esAtiva').checked };
+    exigir_gps: el('esGps').checked, exigir_selfie: el('esSelfie').checked, ativa: el('esAtiva').checked,
+    razao_social: el('esRazao').value.trim() || null, cnpj: el('esCnpj').value.replace(/\D/g, '') || null,
+    cei_caepf_cno: el('esCei').value.trim() || null };
+  if (!dados.cnpj) { toast('Informe o CNPJ da escola. Ele é obrigatório no espelho de ponto.'); el('esCnpj').focus(); return; }
+  if (!Espelho.cnpjValido(dados.cnpj)) { toast('CNPJ inválido. Confira os números.'); el('esCnpj').focus(); return; }
+  if (!dados.razao_social || dados.razao_social.length < 3) { toast('Informe a razão social da escola (como está no cartão CNPJ).'); el('esRazao').focus(); return; }
   if (dados.exigir_gps && lat == null) { toast('Para exigir GPS, informe as coordenadas da escola.'); return; }
   var id = el('esId').value;
   var q = id ? sb.from('escolas').update(dados).eq('id', id) : sb.from('escolas').insert(dados);
