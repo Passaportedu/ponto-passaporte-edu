@@ -142,15 +142,40 @@
     var q = new URLSearchParams(location.search).get('e');
     if (q) { codigo = q.trim().toUpperCase(); gravarLocal('ponto_escola', codigo); }
     else codigo = lerLocal('ponto_escola');
-    if (!codigo) {
-      el('carregando').textContent = 'Escaneie o QR Code da sua escola para abrir o ponto.';
-      return;
-    }
-    rpc('app_escola', { p_codigo: codigo }).then(montar).catch(function (e) {
-      el('carregando').textContent = '';
-      erro(e);
-    });
+    if (!codigo) { pedirCodigo(); return; }
+    carregarEscola(codigo);
   })();
+
+  function carregarEscola(c) {
+    codigo = c;
+    el('carregando').textContent = 'Carregando...';
+    rpc('app_escola', { p_codigo: codigo }).then(function (d) {
+      gravarLocal('ponto_escola', d.codigo);
+      // Mantém o código no endereço: o ícone da tela inicial (iPhone/Android) salva este endereço
+      if (new URLSearchParams(location.search).get('e') !== d.codigo && history.replaceState) {
+        history.replaceState(null, '', location.pathname + '?e=' + encodeURIComponent(d.codigo));
+      }
+      montar(d);
+    }).catch(function (e) {
+      erro(e);
+      pedirCodigo();
+    });
+  }
+
+  // Sem código (ícone antigo da tela inicial, ou link sem ?e=): deixa digitar o código da escola
+  function pedirCodigo() {
+    var box = el('carregando');
+    box.innerHTML = '<p style="margin:0 0 12px">Escaneie o QR Code da sua escola ou digite o código da unidade (está no cartaz, abaixo do QR Code).</p>' +
+      '<input id="codEscola" placeholder="Ex.: CAM-01" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase;text-align:center;max-width:260px">' +
+      '<button class="btn2 cheio" id="btnCodEscola" style="max-width:260px;margin-top:10px">Abrir ponto</button>';
+    el('btnCodEscola').onclick = function () {
+      var c = el('codEscola').value.trim().toUpperCase();
+      if (c.length < 3) { erro({ message: 'Digite o código da escola, por exemplo CAM-01.' }); return; }
+      limparMsg();
+      carregarEscola(c);
+    };
+    el('codEscola').onkeydown = function (ev) { if (ev.key === 'Enter') el('btnCodEscola').click(); };
+  }
 
   function montar(d) {
     escola = d;

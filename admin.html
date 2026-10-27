@@ -704,7 +704,7 @@ function mostrarQr(e) {
   var url = urlApp(e.codigo);
   el('esQr').innerHTML = '<div class="card imprimir-qr" style="text-align:center">' +
     '<h2 style="font-size:22px">' + esc(e.nome) + '</h2><p style="font-size:16px">Aponte a câmera do celular para registrar o ponto</p>' +
-    '<div class="qr" id="qrDesenho"></div><p class="dica" style="word-break:break-all">' + esc(url) + '</p>' +
+    '<div class="qr" id="qrDesenho"></div><p style="font-size:18px;margin:6px 0 2px">Código da escola: <b>' + esc(e.codigo) + '</b></p><p class="dica" style="word-break:break-all">' + esc(url) + '</p>' +
     '<div class="linha naoimprime" style="justify-content:center"><button class="b" onclick="imprimirQr()">Imprimir cartaz</button>' +
     '<button class="b2" onclick="navigator.clipboard.writeText(\'' + url.replace(/'/g, "\\'") + '\').then(function(){toast(\'Link copiado.\')})">Copiar link</button></div></div>';
   new QRCode(el('qrDesenho'), { text: url, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M });
