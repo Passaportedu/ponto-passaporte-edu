@@ -8,7 +8,7 @@
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="espelho.js"></script>
+<script src="espelho.js?v=2026-10-27"></script>
 <style>
   :root { --azul:#000179; --azul2:#e8f0fe; --verde:#1e8e3e; --verm:#c5221f; --cinza:#5f6368; --linha:#dadce0; --fundo:#f3f6fa; }
   * { box-sizing:border-box; }
@@ -806,7 +806,7 @@ function gerarEspelho() {
     var html = lista.map(function (c) {
       faltas = faltas.concat(Espelho.pendenciasCadastro(escola, c));
       return Espelho.montar({
-        escola: escola, colaborador: c, ym: ym, emissao: agora, hoje: hojeNoFuso(escola.fuso), nomeRede: CFG.NOME_REDE, logo: CFG.LOGO || null,
+        escola: escola, colaborador: c, ym: ym, emissao: agora, hoje: hojeNoFuso(escola.fuso), nomeRede: CFG.NOME_REDE, logo: CFG.LOGO || 'logo.png',
         registros: regs.filter(function (x) { return x.colaborador_id === c.id; }),
         tratamentos: trats.filter(function (x) { return x.colaborador_id === c.id; }),
         ocorrencias: ocs.filter(function (x) { return x.colaborador_id === c.id; })
