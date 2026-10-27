@@ -451,7 +451,7 @@
       .then(function (r) {
         var hoje = new Intl.DateTimeFormat('en-CA', { timeZone: (r.escola && r.escola.fuso) || 'America/Bahia' }).format(new Date());
         el('espelhoFolha').innerHTML = Espelho.montar({ escola: r.escola, colaborador: r.colaborador, ym: ym, emissao: r.emissao, hoje: hoje,
-          nomeRede: CFG.NOME_REDE, registros: r.registros, tratamentos: r.tratamentos, ocorrencias: r.ocorrencias });
+          nomeRede: CFG.NOME_REDE, logo: CFG.LOGO || null, registros: r.registros, tratamentos: r.tratamentos, ocorrencias: r.ocorrencias });
         el('espelhoView').classList.remove('oculto');
         el('espelhoView').scrollIntoView({ behavior: 'smooth' });
       })

@@ -11,6 +11,12 @@
 
   var CSS = [
     '.folha{background:#fff;width:190mm;margin:0 auto 16px;padding:7mm;font-family:Arial,sans-serif;font-size:8.6pt;color:#000;box-shadow:0 1px 3px rgba(0,0,0,.15)}',
+    '.folha{-webkit-print-color-adjust:exact;print-color-adjust:exact}',
+    '.folha .cab{display:flex;align-items:center;gap:10px;background:#000179;border-radius:4px;padding:2.2mm 4mm;margin-bottom:5px;color:#fff}',
+    '.folha .cab img{height:10mm;display:block}',
+    '.folha .cab .tit{flex:1;text-align:right}',
+    '.folha .cab .tit div:first-child{font-size:13pt;font-weight:bold;letter-spacing:.5px}',
+    '.folha .cab .tit div+div{font-size:9pt;color:#EFC034;font-weight:bold;margin-top:1px}',
     '.folha h3{text-align:center;margin:0;font-size:12pt;color:#000179}',
     '.folha h4{text-align:center;margin:1px 0 5px;font-size:10pt}',
     '.folha .bloco{border:1px solid #9aa0ad;border-radius:3px;padding:3px 6px;margin-bottom:4px}',
@@ -78,7 +84,7 @@
     return { minutos: total + acrescimo, noturno: noturno };
   }
 
-  /* dados = { escola, colaborador, ym:'AAAA-MM', registros[], tratamentos[] (ativos), ocorrencias[], emissao (ISO local), hoje:'AAAA-MM-DD', nomeRede } */
+  /* dados = { escola, colaborador, ym:'AAAA-MM', registros[], tratamentos[] (ativos), ocorrencias[], emissao (ISO local), hoje:'AAAA-MM-DD', nomeRede, logo (endereço da imagem, opcional) } */
   function montar(d) {
     injetarCss();
     var esc0 = d.escola || {}, c = d.colaborador || {};
@@ -137,12 +143,12 @@
     }
 
     var emissao = d.emissao ? dataBr(d.emissao) + ' ' + String(d.emissao).slice(11, 16) : '';
-    var titulo = (d.nomeRede && String(esc0.nome || '').toLowerCase().indexOf(String(d.nomeRede).toLowerCase()) !== 0 ? d.nomeRede + ' · ' : '') + (esc0.nome || '');
     var jornadaTxt = c.carga_semanal ? String(c.carga_semanal).replace('.', ',') + ' horas semanais' : '';
 
     return '<div class="folha">' +
-      '<h3>ESPELHO DE PONTO ELETRÔNICO</h3>' +
-      '<h4>' + esc(titulo.toUpperCase()) + '</h4>' +
+      (d.logo
+        ? '<div class="cab"><img src="' + esc(d.logo) + '" alt=""><div class="tit"><div>ESPELHO DE PONTO ELETRÔNICO</div></div></div>'
+        : '<h3 style="margin-bottom:5px">ESPELHO DE PONTO ELETRÔNICO</h3>') +
       '<div class="bloco"><b class="t">Empregador</b><div class="grade2">' +
         '<div><b>Nome / razão social:</b> ' + campo(esc0.razao_social || '', 'razão social não informada') + '</div>' +
         '<div><b>CNPJ/CPF:</b> ' + campo(fmtCnpj(esc0.cnpj), 'não informado') + '</div>' +
