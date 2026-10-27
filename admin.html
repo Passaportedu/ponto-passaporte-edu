@@ -180,8 +180,11 @@
               <option value="SE">SE - Serviço externo</option><option value="AJ">AJ - Ajuste / batida esquecida</option>
             </select></div>
           <div><label>Observação</label><input id="oObs" placeholder="Ex.: esqueceu a saída, saiu às 18:00"></div>
+          <div><label>Anexo (atestado, declaração)</label><input type="file" id="oArquivo" accept="application/pdf,image/jpeg,image/png,image/*"></div>
           <div><button class="b" id="oSalvar">Lançar</button></div>
         </div>
+        <p class="dica" style="margin-top:8px">PDF ou foto (JPG/PNG) de até 5 MB. No celular, dá para fotografar o atestado direto. Fotos grandes são reduzidas automaticamente.</p>
+        <input type="file" id="oArqLinha" accept="application/pdf,image/jpeg,image/png,image/*" class="oculto">
       </div>
       <div class="card rolagem">
         <div class="linha" style="margin-bottom:8px"><label style="margin:0">Mês</label><input type="month" id="oMes" style="width:auto"></div>
@@ -540,30 +543,121 @@ function telaOcor() {
   carregarOcor();
 }
 el('oMes').onchange = carregarOcor;
+var ocorrencias = [];
 function carregarOcor() {
   var ym = el('oMes').value;
-  sb.from('ocorrencias').select('id,colaborador_id,data,codigo,observacao').eq('escola_id', escola.id)
+  sb.from('ocorrencias').select('id,colaborador_id,data,codigo,observacao,anexo_path,anexo_nome').eq('escola_id', escola.id)
     .gte('data', ym + '-01').lte('data', fimMes(ym)).order('data').then(ok).then(function (l) {
+      ocorrencias = l;
       var nomes = {}; colabs.forEach(function (c) { nomes[c.id] = c.nome; });
-      var h = '<tr><th>Data</th><th>Colaborador</th><th>Código</th><th>Observação</th><th></th></tr>';
+      var h = '<tr><th>Data</th><th>Colaborador</th><th>Código</th><th>Observação</th><th>Anexo</th><th></th></tr>';
       l.forEach(function (o) {
+        var anexo = o.anexo_path
+          ? '<span class="linha"><button class="b2" data-ver="' + o.id + '" title="' + esc(o.anexo_nome) + '">Ver anexo</button><button class="b2" data-anexar="' + o.id + '">Trocar</button></span>'
+          : '<button class="b2" data-anexar="' + o.id + '">Anexar</button>';
         h += '<tr><td>' + dataBr(o.data) + '</td><td>' + esc(nomes[o.colaborador_id]) + '</td><td>' + o.codigo + ' - ' + CODIGOS[o.codigo] +
-          '</td><td>' + esc(o.observacao) + '</td><td><button class="b2 perigo" data-apagar="' + o.id + '">Excluir</button></td></tr>';
+          '</td><td>' + esc(o.observacao) + '</td><td>' + anexo + '</td><td><button class="b2 perigo" data-apagar="' + o.id + '">Excluir</button></td></tr>';
       });
-      if (!l.length) h += '<tr><td colspan="5" class="dica">Nenhuma ocorrência neste mês.</td></tr>';
+      if (!l.length) h += '<tr><td colspan="6" class="dica">Nenhuma ocorrência neste mês.</td></tr>';
       el('oTabela').innerHTML = h;
     }).catch(falha);
 }
+
+/* ---------- ANEXOS (bucket privado "anexos") ---------- */
+var LIMITE_ANEXO = 5 * 1024 * 1024;
+function uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
+}
+// PDF vai como está; foto é reduzida para no máximo 1800 px (JPG), o suficiente para ler o atestado
+function prepararArquivo(f) {
+  if (!f) return Promise.resolve(null);
+  if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+    if (f.size > LIMITE_ANEXO) return Promise.reject(new Error('O PDF tem mais de 5 MB. Reduza o arquivo ou envie uma foto.'));
+    return Promise.resolve({ blob: f, ext: 'pdf', tipo: 'application/pdf', nome: f.name });
+  }
+  if (!/^image\//.test(f.type)) return Promise.reject(new Error('Envie um PDF ou uma foto (JPG ou PNG).'));
+  return new Promise(function (resolve, reject) {
+    var img = new Image(), url = URL.createObjectURL(f);
+    img.onload = function () {
+      var fator = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight));
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * fator); c.height = Math.round(img.naturalHeight * fator);
+      var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function (b) {
+        if (!b) { reject(new Error('Não consegui ler a foto.')); return; }
+        if (b.size > LIMITE_ANEXO) { reject(new Error('A foto ficou com mais de 5 MB.')); return; }
+        resolve({ blob: b, ext: 'jpg', tipo: 'image/jpeg', nome: (f.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg' });
+      }, 'image/jpeg', 0.82);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Não consegui ler a imagem. Envie em JPG, PNG ou PDF.')); };
+    img.src = url;
+  });
+}
+function enviarAnexo(f) {
+  return prepararArquivo(f).then(function (a) {
+    if (!a) return null;
+    var d = new Date();
+    var caminho = escola.id + '/' + d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + uuid() + '.' + a.ext;
+    return sb.storage.from('anexos').upload(caminho, a.blob, { contentType: a.tipo, upsert: false }).then(function (r) {
+      if (r.error) throw new Error('Não consegui enviar o anexo (' + r.error.message + ').');
+      return { path: caminho, nome: a.nome };
+    });
+  });
+}
+function apagarArquivo(caminho) {
+  if (!caminho) return Promise.resolve();
+  return sb.storage.from('anexos').remove([caminho]).then(function () {}, function () {});
+}
+
 el('oTabela').onclick = function (ev) {
-  var b = ev.target.closest('[data-apagar]'); if (!b || !confirm('Excluir esta ocorrência?')) return;
-  sb.from('ocorrencias').delete().eq('id', b.dataset.apagar).then(ok).then(carregarOcor).catch(falha);
+  var b = ev.target.closest('button'); if (!b) return;
+  var id = b.dataset.apagar || b.dataset.ver || b.dataset.anexar;
+  var o = ocorrencias.find(function (x) { return String(x.id) === String(id); });
+  if (b.dataset.apagar) {
+    if (!confirm('Excluir esta ocorrência' + (o && o.anexo_path ? ' e o anexo' : '') + '?')) return;
+    sb.from('ocorrencias').delete().eq('id', id).then(ok)
+      .then(function () { return apagarArquivo(o && o.anexo_path); }).then(carregarOcor).catch(falha);
+  } else if (b.dataset.ver) {
+    var janela = window.open('', '_blank');   // abre já no clique para o navegador não bloquear
+    sb.storage.from('anexos').createSignedUrl(o.anexo_path, 300).then(ok).then(function (d) {
+      if (janela) janela.location = d.signedUrl; else location.href = d.signedUrl;
+    }).catch(function (e) { if (janela) janela.close(); falha(e); });
+  } else if (b.dataset.anexar) {
+    var inp = el('oArqLinha');
+    inp.value = '';
+    inp.onchange = function () {
+      if (!inp.files[0]) return;
+      toast('Enviando anexo...');
+      var antigo = o.anexo_path, novo = null;
+      enviarAnexo(inp.files[0]).then(function (a) {
+        novo = a;
+        return sb.from('ocorrencias').update({ anexo_path: a.path, anexo_nome: a.nome }).eq('id', o.id).then(ok);
+      }).then(function () { return apagarArquivo(antigo); })
+        .then(function () { toast('Anexo salvo.'); carregarOcor(); })
+        .catch(function (e) { if (novo) apagarArquivo(novo.path); falha(e); });
+    };
+    inp.click();
+  }
 };
 el('oSalvar').onclick = function () {
   if (!el('oColab').value || !el('oData').value) { toast('Escolha o colaborador e a data.'); return; }
-  sb.from('ocorrencias').insert({ escola_id: escola.id, colaborador_id: el('oColab').value, data: el('oData').value,
-    codigo: el('oCodigo').value, observacao: el('oObs').value.trim() || null }).then(ok)
-    .then(function () { toast('Ocorrência lançada.'); el('oObs').value = ''; carregarOcor(); })
-    .catch(function (e) { falha(/duplicate|unique/i.test(e.message) ? new Error('Já existe ocorrência para esse colaborador nesse dia. Exclua a anterior primeiro.') : e); });
+  var bt = el('oSalvar'), arq = el('oArquivo').files[0], anexo = null;
+  bt.disabled = true; bt.textContent = arq ? 'Enviando anexo...' : 'Lançando...';
+  enviarAnexo(arq).then(function (a) {
+    anexo = a;
+    return sb.from('ocorrencias').insert({ escola_id: escola.id, colaborador_id: el('oColab').value, data: el('oData').value,
+      codigo: el('oCodigo').value, observacao: el('oObs').value.trim() || null,
+      anexo_path: a ? a.path : null, anexo_nome: a ? a.nome : null }).then(ok);
+  }).then(function () {
+    toast('Ocorrência lançada' + (anexo ? ' com anexo.' : '.'));
+    el('oObs').value = ''; el('oArquivo').value = ''; carregarOcor();
+  }).catch(function (e) {
+    if (anexo) apagarArquivo(anexo.path);
+    falha(/duplicate|unique/i.test(e.message) ? new Error('Já existe ocorrência para esse colaborador nesse dia. Exclua a anterior primeiro.') : e);
+  }).then(function () { bt.disabled = false; bt.textContent = 'Lançar'; });
 };
 
 /* ===================== ESPELHO ===================== */
@@ -582,7 +676,7 @@ function dadosMes(ym) {
         .eq('escola_id', escola.id).gte('data_local', ym + '-01').lte('data_local', fimMes(ym)).order('data_local').order('hora_local');
     }),
     buscarTudo(function () {
-      return sb.from('ocorrencias').select('colaborador_id,data,codigo,observacao')
+      return sb.from('ocorrencias').select('colaborador_id,data,codigo,observacao,anexo_path')
         .eq('escola_id', escola.id).gte('data', ym + '-01').lte('data', fimMes(ym));
     })
   ]);
@@ -631,7 +725,7 @@ function folha(c, ym, regs, ocs) {
       if (b.fora) obs.push('Fora do local');
     } else if (!fds && iso <= hoje && !oc && (!c.criado_em || iso >= c.criado_em.slice(0, 10))) obs.push('Sem registro');
     if (obs.length) pend++;
-    var txtOc = oc ? oc.codigo + (oc.observacao ? ': ' + oc.observacao : '') : '';
+    var txtOc = oc ? oc.codigo + (oc.observacao ? ': ' + oc.observacao : '') + (oc.anexo_path ? ' (documento anexado)' : '') : '';
     var obsTxt = [txtOc].concat(obs).filter(Boolean).join('; ');
     linhas += '<tr' + (fds ? ' class="fds"' : '') + '><td>' + ('0' + d).slice(-2) + '/' + ('0' + mes).slice(-2) + '</td><td>' + DIAS[dow] +
       '</td><td>' + e + '</td><td>' + si + '</td><td>' + ri + '</td><td>' + s + '</td><td>' + horas + '</td><td class="obs"' +
