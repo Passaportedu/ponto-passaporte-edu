@@ -28,6 +28,15 @@
   label { display:block; font-size:12px; font-weight:600; color:var(--cinza); margin-bottom:4px; }
   input, select, textarea { font:inherit; padding:8px 10px; border:1px solid #c7ccd3; border-radius:8px; background:#fff; color:#202124; width:100%; }
   textarea { min-height:90px; }
+  .es-bloco { font-size:13px; font-weight:700; color:var(--azul); text-transform:uppercase; letter-spacing:.04em; margin:6px 0 8px; padding-bottom:6px; border-bottom:1px solid var(--linha); }
+  .es-bloco span { text-transform:none; letter-spacing:0; font-weight:400; color:#6b7280; }
+  .es-grade { display:grid; gap:12px; }
+  .es-id { grid-template-columns: 150px 1.3fr 210px 1.5fr; }
+  .es-loc { grid-template-columns: 1.2fr 70px 1.2fr 1.5fr 120px; }
+  .es-status { min-height:20px; font-size:12.5px; margin:4px 0 14px; }
+  .es-rodape { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; padding-top:14px; border-top:1px solid var(--linha); }
+  @media (max-width: 900px) { .es-id, .es-loc { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 520px) { .es-id, .es-loc { grid-template-columns: 1fr; } }
   .grade { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; align-items:end; }
   .linha { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   button.b { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--azul); background:var(--azul); color:#fff; cursor:pointer; }
@@ -239,13 +248,16 @@
       <div class="card">
         <h2 id="esTitulo">Nova escola</h2>
         <input type="hidden" id="esId">
-        <div class="grade">
+        <div class="es-bloco">Dados da escola <span>(saem no cabeçalho do espelho de ponto)</span></div>
+        <div class="es-grade es-id">
           <div><label>Código (vai no QR) *</label><input id="esCodigo" placeholder="CAM-01" style="text-transform:uppercase"></div>
           <div><label>Nome da escola *</label><input id="esNome" placeholder="Passaporte Edu Camaçari"></div>
-          <div><label>CNPJ da escola *</label><input id="esCnpj" inputmode="numeric" maxlength="18" placeholder="00.000.000/0000-00" autocomplete="off">
-            <div class="dica" id="esCnpjInfo">Sai no cabeçalho do espelho de ponto (Portaria 671, art. 84). Empregador pessoa física: digite o CPF.</div></div>
+          <div><label>CNPJ *</label><input id="esCnpj" inputmode="numeric" maxlength="18" placeholder="00.000.000/0000-00" autocomplete="off"></div>
           <div><label>Razão social *</label><input id="esRazao" placeholder="Como está no cartão CNPJ" autocomplete="off"></div>
-          <div><label>CEI/CAEPF/CNO (se houver)</label><input id="esCei" autocomplete="off"></div>
+        </div>
+        <div class="es-status" id="esCnpjInfo"></div>
+        <div class="es-bloco">Localização e regras do ponto</div>
+        <div class="es-grade es-loc">
           <div><label>Cidade</label><input id="esCidade"></div>
           <div><label>UF</label><input id="esUf" maxlength="2" style="text-transform:uppercase"></div>
           <div><label>Fuso horário</label>
@@ -257,12 +269,16 @@
               <option value="America/Campo_Grande">Mato Grosso do Sul</option><option value="America/Porto_Velho">Rondônia</option>
               <option value="America/Rio_Branco">Acre</option><option value="America/Boa_Vista">Roraima</option>
             </select></div>
-          <div><label>Coordenadas (cole do Google Maps)</label><input id="esCoord" placeholder="-12.6988776, -38.3254029"></div>
+          <div><label>Coordenadas (Google Maps)</label><input id="esCoord" placeholder="-12.6988776, -38.3254029"></div>
           <div><label>Raio aceito (m)</label><input id="esRaio" type="number" value="200" min="30" max="5000"></div>
-          <div class="linha"><label class="linha" style="margin:0"><input type="checkbox" id="esGps" checked style="width:auto"> exigir GPS</label>
+        </div>
+        <div class="es-rodape">
+          <div class="linha">
+            <label class="linha" style="margin:0"><input type="checkbox" id="esGps" checked style="width:auto"> exigir GPS</label>
             <label class="linha" style="margin:0"><input type="checkbox" id="esSelfie" checked style="width:auto"> exigir selfie</label>
-            <label class="linha" style="margin:0"><input type="checkbox" id="esAtiva" checked style="width:auto"> ativa</label></div>
-          <div class="linha"><button class="b" id="esSalvar">Salvar</button><button class="b2 oculto" id="esCancelar">Cancelar</button></div>
+            <label class="linha" style="margin:0"><input type="checkbox" id="esAtiva" checked style="width:auto"> escola ativa</label>
+          </div>
+          <div class="linha"><button class="b2 oculto" id="esCancelar">Cancelar</button><button class="b" id="esSalvar">Salvar escola</button></div>
         </div>
       </div>
       <div class="card rolagem"><table class="tabela" id="esTabela"></table></div>
@@ -851,7 +867,7 @@ el('esTabela').onclick = function (ev) {
     el('esId').value = e.id; el('esCodigo').value = e.codigo; el('esNome').value = e.nome; el('esCidade').value = e.cidade || '';
     el('esUf').value = e.uf || ''; el('esFuso').value = e.fuso; el('esRaio').value = e.raio_m;
     el('esCoord').value = e.latitude != null ? e.latitude + ', ' + e.longitude : '';
-    el('esRazao').value = e.razao_social || ''; el('esCnpj').value = e.cnpj ? Espelho.fmtCnpj(e.cnpj) : ''; infoCnpj(); el('esCei').value = e.cei_caepf_cno || '';
+    el('esRazao').value = e.razao_social || ''; el('esCnpj').value = e.cnpj ? Espelho.fmtCnpj(e.cnpj) : ''; infoCnpj();
     el('esGps').checked = e.exigir_gps; el('esSelfie').checked = e.exigir_selfie; el('esAtiva').checked = e.ativa;
     el('esTitulo').textContent = 'Editar escola'; el('esCancelar').classList.remove('oculto');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -874,7 +890,7 @@ function imprimirQr() {
   setTimeout(function () { antes.forEach(function (c) { c.classList.remove('naoimprime'); }); }, 500);
 }
 function limparFormEscola() {
-  ['esId', 'esCodigo', 'esNome', 'esCidade', 'esUf', 'esCoord', 'esRazao', 'esCnpj', 'esCei'].forEach(function (i) { el(i).value = ''; });
+  ['esId', 'esCodigo', 'esNome', 'esCidade', 'esUf', 'esCoord', 'esRazao', 'esCnpj'].forEach(function (i) { el(i).value = ''; });
   el('esFuso').value = 'America/Bahia'; el('esRaio').value = 200;
   el('esGps').checked = true; el('esSelfie').checked = true; el('esAtiva').checked = true;
   el('esTitulo').textContent = 'Nova escola'; el('esCancelar').classList.add('oculto');
@@ -887,15 +903,15 @@ function mascaraCnpj(v) {
     return a + (b ? '.' + b : '') + (c ? '.' + c : '') + (e ? '/' + e : '') + (f ? '-' + f : ''); });
 }
 function infoCnpj() {
-  var d = el('esCnpj').value.replace(/\D/g, ''), i = el('esCnpjInfo');
-  if (!d) { i.style.color = ''; i.textContent = 'Sai no cabeçalho do espelho de ponto (Portaria 671, art. 84). Empregador pessoa física: digite o CPF.'; return; }
-  if (d.length === 14 || d.length === 11) {
+  var d = el('esCnpj').value.replace(/\D/g, ''), i = el('esCnpjInfo'), cor = '#6b7280', t = '';
+  if (!d) t = 'Empregador pessoa física: digite o CPF no campo CNPJ.';
+  else if (d.length === 14 || d.length === 11) {
     var v = Espelho.cnpjValido(d);
-    i.style.color = v ? '#0d652d' : 'var(--verm)';
-    i.textContent = v ? (d.length === 14 ? 'CNPJ válido.' : 'CPF do empregador válido.') : (d.length === 14 ? 'CNPJ inválido. Confira os números.' : 'Continue digitando (CNPJ tem 14 números).');
-    return;
-  }
-  i.style.color = ''; i.textContent = d.length + ' de 14 números.';
+    if (v) { cor = '#0d652d'; t = d.length === 14 ? '✓ CNPJ válido' : '✓ CPF do empregador válido'; }
+    else if (d.length === 14) { cor = 'var(--verm)'; t = '✗ CNPJ inválido, confira os números'; }
+    else t = 'Continue digitando: o CNPJ tem 14 números';
+  } else t = d.length + ' de 14 números';
+  i.style.color = cor; i.textContent = t;
 }
 el('esCnpj').oninput = function () { var v = mascaraCnpj(this.value); if (v !== this.value) this.value = v; infoCnpj(); };
 el('esCnpj').onblur = function () { var d = this.value.replace(/\D/g, ''); if (d.length === 11) this.value = Espelho.fmtCpf(d); };
@@ -915,8 +931,7 @@ el('esSalvar').onclick = function () {
     uf: el('esUf').value.trim().toUpperCase() || null, fuso: el('esFuso').value, latitude: lat, longitude: lng,
     raio_m: Math.min(5000, Math.max(30, parseInt(el('esRaio').value, 10) || 200)),
     exigir_gps: el('esGps').checked, exigir_selfie: el('esSelfie').checked, ativa: el('esAtiva').checked,
-    razao_social: el('esRazao').value.trim() || null, cnpj: el('esCnpj').value.replace(/\D/g, '') || null,
-    cei_caepf_cno: el('esCei').value.trim() || null };
+    razao_social: el('esRazao').value.trim() || null, cnpj: el('esCnpj').value.replace(/\D/g, '') || null };
   if (!dados.cnpj) { toast('Informe o CNPJ da escola. Ele é obrigatório no espelho de ponto.'); el('esCnpj').focus(); return; }
   if (!Espelho.cnpjValido(dados.cnpj)) { toast('CNPJ inválido. Confira os números.'); el('esCnpj').focus(); return; }
   if (!dados.razao_social || dados.razao_social.length < 3) { toast('Informe a razão social da escola (como está no cartão CNPJ).'); el('esRazao').focus(); return; }
