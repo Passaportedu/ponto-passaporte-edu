@@ -873,21 +873,51 @@ el('esTabela').onclick = function (ev) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } else mostrarQr(e);
 };
+var qrAtual = null, escolaQr = null;
 function mostrarQr(e) {
   var url = urlApp(e.codigo);
+  escolaQr = e;
   el('esQr').innerHTML = '<div class="card imprimir-qr" style="text-align:center">' +
     '<h2 style="font-size:22px">' + esc(e.nome) + '</h2><p style="font-size:16px">Aponte a câmera do celular para registrar o ponto</p>' +
     '<div class="qr" id="qrDesenho"></div><p style="font-size:18px;margin:6px 0 2px">Código da escola: <b>' + esc(e.codigo) + '</b></p><p class="dica" style="word-break:break-all">' + esc(url) + '</p>' +
     '<div class="linha naoimprime" style="justify-content:center"><button class="b" onclick="imprimirQr()">Imprimir cartaz</button>' +
     '<button class="b2" onclick="navigator.clipboard.writeText(\'' + url.replace(/'/g, "\\'") + '\').then(function(){toast(\'Link copiado.\')})">Copiar link</button></div></div>';
-  new QRCode(el('qrDesenho'), { text: url, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M });
+  qrAtual = new QRCode(el('qrDesenho'), { text: url, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M });
   el('esQr').scrollIntoView({ behavior: 'smooth' });
 }
+/* Cartaz A4 para imprimir e plastificar (logo, QR em vetor, código e passo a passo) */
+var CARTAZ_CSS = "\n@page { size: A4; margin: 0; }\n* { box-sizing: border-box; margin: 0; padding: 0; }\n:root { --azul:#000179; --azul2:#1a1f9e; --amarelo:#EFC034; --texto:#1b1d3a; }\nbody { font-family: Inter, sans-serif; color: var(--texto); }\n.pag { width:210mm; height:297mm; padding:9mm; background:#fff; }\n.card { position:relative; height:100%; border-radius:9mm; overflow:hidden; background:#fff;\n  border:1.2mm solid var(--azul); display:flex; flex-direction:column; }\n.topo { background:var(--azul); padding:11mm 12mm 17mm; text-align:center; position:relative; }\n.topo img { height:19mm; }\n.topo .faixa { margin-top:7mm; display:inline-block; background:var(--amarelo); color:var(--azul);\n  font-weight:800; letter-spacing:.18em; font-size:7mm; padding:2.6mm 9mm; border-radius:20mm; }\n.onda { position:absolute; left:-10%; right:-10%; bottom:-1px; height:9mm; background:#fff; border-radius:50% 50% 0 0 / 100% 100% 0 0; }\n.meio { flex:1; display:flex; flex-direction:column; align-items:center; padding:3mm 14mm 0; }\n.escola { font-size:9.5mm; font-weight:800; color:var(--azul); text-align:center; line-height:1.1; }\n.sub { font-size:4.6mm; color:#5a5f7d; margin-top:2.5mm; text-align:center; }\n.qrbox { margin-top:7mm; padding:6mm; border-radius:7mm; background:#fff;\n  border:1.6mm solid var(--amarelo); box-shadow:0 0 0 1.8mm #fff, 0 0 0 2.4mm #dfe2f5; }\n.qrbox svg { width:86mm; height:86mm; display:block; }\n.codigo { margin-top:6mm; font-size:4.6mm; color:#5a5f7d; }\n.codigo b { display:inline-block; margin-left:2mm; font-size:6.4mm; color:var(--azul); letter-spacing:.08em;\n  border:.5mm dashed var(--azul); border-radius:2.5mm; padding:.6mm 3.5mm; }\n.passos { display:flex; gap:5mm; margin:8mm 0 6mm; width:100%; }\n.passo { flex:1; background:#f2f4fc; border-radius:5mm; padding:5mm 3.5mm 4.5mm; text-align:center; }\n.num { width:10mm; height:10mm; border-radius:50%; background:var(--azul); color:var(--amarelo);\n  font-weight:800; font-size:5.4mm; display:flex; align-items:center; justify-content:center; margin:0 auto 2.6mm; }\n.passo h3 { font-size:4.4mm; color:var(--azul); font-weight:800; margin-bottom:1.2mm; }\n.passo p { font-size:3.4mm; line-height:1.35; color:#4a4f6d; }\n.rodape { margin-top:auto; background:var(--azul); color:#fff; display:flex; justify-content:space-between;\n  align-items:center; padding:5mm 12mm; font-size:3.5mm; }\n.rodape b { color:var(--amarelo); font-weight:700; }\n";
+var CARTAZ_HTML = "<div class=\"pag\"><div class=\"card\">\n  <div class=\"topo\">\n    {{LOGO}}\n    <div><span class=\"faixa\">REGISTRO DE PONTO</span></div>\n    <div class=\"onda\"></div>\n  </div>\n  <div class=\"meio\">\n    <div class=\"escola\">{{ESCOLA}}</div>\n    <div class=\"sub\">Aponte a c\u00e2mera do celular para registrar o seu ponto</div>\n    <div class=\"qrbox\">{{QR}}</div>\n    <div class=\"codigo\">C\u00f3digo da escola <b>{{CODIGO}}</b></div>\n    <div class=\"passos\">\n      <div class=\"passo\"><div class=\"num\">1</div><h3>Escaneie</h3><p>Abra a c\u00e2mera do celular e aponte para o QR Code</p></div>\n      <div class=\"passo\"><div class=\"num\">2</div><h3>Identifique-se</h3><p>Escolha o seu nome na lista e digite o seu PIN</p></div>\n      <div class=\"passo\"><div class=\"num\">3</div><h3>Registre</h3><p>Tire a selfie e toque em <b>Registrar ponto</b></p></div>\n    </div>\n  </div>\n  <div class=\"rodape\"><span>D\u00favidas ou problemas para registrar? Procure a coordena\u00e7\u00e3o.</span><span>C\u00f3digo <b>{{CODIGO}}</b></span></div>\n</div></div>";
+function qrSvg(q) {
+  var m = q && q._oQRCode, n = m ? m.getModuleCount() : 0, d = '';
+  if (!n) return el('qrDesenho').innerHTML;
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (m.isDark(r, c)) d += 'M' + c + ' ' + r + 'h1v1h-1z';
+  return '<svg viewBox="0 0 ' + n + ' ' + n + '" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><path d="' + d + '" fill="#000179"/></svg>';
+}
 function imprimirQr() {
-  var antes = document.querySelectorAll('main > section > .card:not(.imprimir-qr)');
-  antes.forEach(function (c) { c.classList.add('naoimprime'); });
-  window.print();
-  setTimeout(function () { antes.forEach(function (c) { c.classList.remove('naoimprime'); }); }, 500);
+  var e = escolaQr; if (!e) return;
+  var logo = CFG.LOGO ? '<img src="' + esc(new URL(CFG.LOGO, location.href).href) + '" alt="">' : '<div style="color:#fff;font-size:9mm;font-weight:800">' + esc(CFG.NOME_REDE || '') + '</div>';
+  var html = CARTAZ_HTML.replace('{{LOGO}}', logo).replace('{{QR}}', qrSvg(qrAtual))
+    .replace(/{{ESCOLA}}/g, esc(e.nome)).replace(/{{CODIGO}}/g, esc(e.codigo));
+  var f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(f);
+  var doc = f.contentDocument;
+  doc.open();
+  doc.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Cartaz ' + esc(e.codigo) + '</title>' +
+    '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">' +
+    '<style>' + CARTAZ_CSS + '</style></head><body>' + html + '</body></html>');
+  doc.close();
+  var feito = false;
+  function imprimir() {
+    if (feito) return; feito = true;
+    f.contentWindow.focus(); f.contentWindow.print();
+    setTimeout(function () { f.remove(); }, 1500);
+  }
+  var img = doc.querySelector('img');
+  var pronto = function () { (doc.fonts ? doc.fonts.ready : Promise.resolve()).then(function () { setTimeout(imprimir, 150); }); };
+  if (img && !img.complete) { img.onload = pronto; img.onerror = pronto; } else pronto();
+  setTimeout(imprimir, 4000);
 }
 function limparFormEscola() {
   ['esId', 'esCodigo', 'esNome', 'esCidade', 'esUf', 'esCoord', 'esRazao', 'esCnpj'].forEach(function (i) { el(i).value = ''; });
