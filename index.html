@@ -92,13 +92,10 @@
 
     <button id="btnRegistrar" disabled>Registrar ponto</button>
 
-    <div class="card" style="margin-top:14px">
-      <span class="titulo">Meu espelho de ponto</span>
-      <div class="dica" style="margin:0 0 8px">Confira suas marcações do mês. Use o seu nome e PIN acima.</div>
-      <div style="display:flex;gap:8px">
-        <input type="month" id="espMes" style="flex:1">
-        <button class="btn2" id="btnEspelho" style="width:auto;padding:12px 16px">Ver</button>
-      </div>
+    <div class="card oculto" id="cardEspelho" style="margin-top:14px">
+      <span class="titulo">Meu espelho de ponto · <span id="espMesNome"></span></span>
+      <div class="dica" style="margin:0 0 8px" id="espPrazo"></div>
+      <button class="btn2" id="btnEspelho">Ver meu espelho</button>
     </div>
   </div>
   <div id="msg" class="msg"></div>
@@ -202,6 +199,7 @@
     if (!d.exigirSelfie) el('cardSelfie').classList.add('oculto');
     el('carregando').classList.add('oculto');
     el('app').classList.remove('oculto');
+    verJanelaEspelho();
     montarLista('');
     var box = el('tipos');
     TIPOS.forEach(function (t) {
@@ -427,15 +425,27 @@
   };
 
   /* ---------- MEU ESPELHO (Portaria 671, art. 84, parágrafo único) ---------- */
-  (function () {
-    var d = new Date(); el('espMes').value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
-  })();
+  // O espelho só aparece 5 dias antes do fechamento (último dia do mês) até o dia 5 do mês seguinte.
+  // A data vem do servidor, então mudar o relógio do celular não abre o espelho.
+  var espYm = null;
+  var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  function verJanelaEspelho() {
+    rpc('app_espelho_janela', { p_codigo: codigo }).then(function (j) {
+      if (!j.aberto) { espYm = null; el('cardEspelho').classList.add('oculto'); return; }
+      espYm = j.ano + '-' + ('0' + j.mes).slice(-2);
+      var ate = j.ate.slice(8, 10) + '/' + j.ate.slice(5, 7);
+      el('espMesNome').textContent = MESES[j.mes - 1] + '/' + j.ano;
+      el('espPrazo').textContent = 'Confira suas marcações e avise a coordenação se precisar de ajuste. Disponível até ' + ate +
+        ' para conferência e impressão. Use o seu nome e PIN acima.';
+      el('cardEspelho').classList.remove('oculto');
+    }).catch(function () { el('cardEspelho').classList.add('oculto'); });
+  }
   el('btnEspelho').onclick = function () {
     limparMsg();
-    var colab = colabSel(), ym = el('espMes').value, pin = el('pin').value;
+    var colab = colabSel(), ym = espYm, pin = el('pin').value;
     if (!colab) { erro({ message: 'Escolha o seu nome na lista acima.' }); return; }
     if (!pin) { el('boxPin').style.display = 'block'; el('pin').focus(); erro({ message: 'Digite o seu PIN acima para ver o espelho.' }); return; }
-    if (!ym) { erro({ message: 'Escolha o mês.' }); return; }
+    if (!ym) { erro({ message: 'O espelho não está disponível para consulta agora.' }); return; }
     var b = this; b.disabled = true; b.textContent = '...';
     rpc('app_espelho', { p_codigo: codigo, p_colaborador: colab.id, p_pin: pin, p_ano: Number(ym.slice(0, 4)), p_mes: Number(ym.slice(5, 7)) })
       .then(function (r) {
@@ -446,7 +456,7 @@
         el('espelhoView').scrollIntoView({ behavior: 'smooth' });
       })
       .catch(erro)
-      .then(function () { b.disabled = false; b.textContent = 'Ver'; });
+      .then(function () { b.disabled = false; b.textContent = 'Ver meu espelho'; });
   };
   el('btnEspFechar').onclick = function () { el('espelhoView').classList.add('oculto'); el('espelhoFolha').innerHTML = ''; };
   el('btnEspImprimir').onclick = function () { window.print(); };
